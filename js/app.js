@@ -4,9 +4,9 @@ import {
   getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword,
   createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, updateProfile,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getDatabase, ref, onValue, get, query, limitToLast } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+import { getDatabase, ref, onValue, get, set, remove, query, limitToLast } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 import { drawZones, groupLabels } from './render.js';
-import { mountStudio } from './editor.js';
+import { mountStudio, filt } from './editor.js';
 
 const app = initializeApp(FIREBASE);
 const auth = getAuth(app);
@@ -16,7 +16,7 @@ const db = getDatabase(app);
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const S = { user: null, me: null, admin: false, cfg: {}, skins: [], fonts: [], assets: [], templates: [], cats: [], stats: {}, orders: [], tx: [], ready: {}, view: '', f: { q: '', cat: '', type: '', sort: 'new' }, unsubs: [] };
+const S = { user: null, me: null, admin: false, cfg: {}, skins: [], fonts: [], assets: [], templates: [], favs: {}, cats: [], stats: {}, orders: [], tx: [], ready: {}, view: '', f: { q: '', cat: '', type: '', sort: 'new' }, unsubs: [] };
 const BASE_FONTS = ['Arial', 'Impact', 'Verdana', 'Georgia', 'Courier New', 'Trebuchet MS'];
 const fmtDate = (t) => new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -173,10 +173,11 @@ onAuthStateChanged(auth, async (u) => {
   S.unsubs.forEach((f) => f());
   S.unsubs = [];
   S.user = u;
-  S.me = null; S.admin = false; S.orders = []; S.tx = [];
+  S.me = null; S.admin = false; S.orders = []; S.tx = []; S.favs = {};
   if (u) {
     try { await api('/api/me/init'); } catch (e) { toast(e.message, 'err'); }
     S.unsubs.push(onValue(ref(db, 'users/' + u.uid), (s) => { S.me = s.val(); renderHeader(); if (S.view === 'wallet') route(); }));
+    S.unsubs.push(onValue(ref(db, 'favorites/' + u.uid), (s) => { S.favs = s.val() || {}; S.editorRefresh && S.editorRefresh(); }));
     S.unsubs.push(onValue(ref(db, 'userOrders/' + u.uid), (s) => { S.orders = arr(s.val()).sort((a, b) => b.createdAt - a.createdAt); if (S.view === 'wallet') route(); }));
     S.unsubs.push(onValue(query(ref(db, 'transactions/' + u.uid), limitToLast(15)), (s) => { S.tx = arr(s.val()).sort((a, b) => b.at - a.at); if (S.view === 'wallet') route(); }));
     try { S.admin = (await get(ref(db, 'admins/' + u.uid))).val() === true; } catch (e) {}
@@ -409,12 +410,12 @@ function tplMini(t) {
     const pos = `left:${(l.x * 100).toFixed(2)}%;top:${(l.y * 100).toFixed(2)}%;transform:translate(-50%,-50%) rotate(${l.rot || 0}deg);opacity:${l.op ?? 1}`;
     if (l.t === 'img') {
       const a = S.assets.find((x) => x.id === l.aid);
-      return a ? `<div class="ml" style="${pos};width:${(l.w * 100).toFixed(2)}%"><img src="${esc(a.preview)}" alt="" style="${l.flip ? 'transform:scaleX(-1)' : ''}"></div>` : '';
+      return a ? `<div class="ml" style="${pos};width:${(l.w * 100).toFixed(2)}%"><img src="${esc(a.preview)}" alt="" style="${l.flip ? 'transform:scaleX(-1);' : ''}filter:${filt(l) || 'none'}"></div>` : '';
     }
     const fs = (l.fs * 100).toFixed(2);
     return `<div class="ml mtx" style="${pos};font-size:${fs}cqw;font-family:'${esc(l.font)}',sans-serif;color:${esc(l.color)};-webkit-text-stroke:${((l.strokeW || 0) * fs).toFixed(2)}cqw ${esc(l.stroke)};paint-order:stroke fill"><span style="display:inline-block;${l.flip ? 'transform:scaleX(-1)' : ''}">${esc(l.text)}</span></div>`;
   }).join('');
-  return `<div class="card glow skin tpl" data-id="${t.id}"><div class="im mm"><div class="mini" style="aspect-ratio:${sk.w || 1}/${sk.h || 1}"><img class="bs" src="${esc(sk.preview)}" alt="">${L}</div><div class="tags"><span class="badge new">TEMPLATE</span></div></div><div class="meta"><h4>${esc(t.name)}</h4><div><span>${esc(t.category || '—')}</span><span>${esc(sk.name)}</span></div></div></div>`;
+  return `<div class="card glow skin tpl" data-id="${t.id}"><div class="im mm"><div class="mini" style="aspect-ratio:${sk.w || 1}/${sk.h || 1}"><img class="bs" src="${esc(sk.preview)}" alt="">${L}</div><div class="tags"><span class="badge new">TEMPLATE</span>${t.price > 0 ? `<span class="badge paid">⚡ +${t.price}</span>` : ''}</div></div><div class="meta"><h4>${esc(t.name)}</h4><div><span>${esc(t.category || '—')}</span><span>${esc(sk.name)}</span></div></div></div>`;
 }
 
 function viewStudio(id, tid) {
@@ -464,7 +465,12 @@ function viewStudio(id, tid) {
   const ctl = mountStudio(v, skin, studioCtx(), { template: tpl });
   S.studioDestroy = ctl.destroy;
 }
-const studioCtx = () => ({ S, esc, toast, modal, api, runAd, auth, API, loginModal, BASE_FONTS, ensureFont, onAssets: (f) => (S.editorRefresh = f) });
+async function toggleFav(id) {
+  if (!S.user) return loginModal('Login করে Favorite করুন');
+  const r = ref(db, 'favorites/' + S.user.uid + '/' + id);
+  try { S.favs[id] ? await remove(r) : await set(r, true); } catch (e) { toast(e.message, 'err'); }
+}
+const studioCtx = () => ({ S, esc, toast, modal, api, runAd, auth, API, loginModal, BASE_FONTS, ensureFont, favs: () => S.favs, toggleFav, onAssets: (f) => (S.editorRefresh = f) });
 
 /* ---------- wallet ---------- */
 function viewWallet() {

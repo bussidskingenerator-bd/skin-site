@@ -10,6 +10,26 @@ export const KINDS = [
   ['pattern', '🎨', 'Pattern / Texture'],
   ['logo', '🔰', 'Logo'],
 ];
+export const filt = (l) => ((l.hue || 0) || (l.sat ?? 1) !== 1 || (l.bri ?? 1) !== 1 ? `hue-rotate(${l.hue || 0}deg) saturate(${l.sat ?? 1}) brightness(${l.bri ?? 1})` : '');
+// Export এর সময় রং বদল (CSS filter এর হুবহু গণিত, সব ব্রাউজারে চলে)
+function recolor(bmp, l) {
+  const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+  const x = c.getContext('2d', { willReadFrequently: true });
+  x.drawImage(bmp, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height), p = d.data;
+  const a = ((l.hue || 0) * Math.PI) / 180, co = Math.cos(a), si = Math.sin(a), s = l.sat ?? 1, br = l.bri ?? 1;
+  const Hm = [[0.213 + co * 0.787 - si * 0.213, 0.715 - co * 0.715 - si * 0.715, 0.072 - co * 0.072 + si * 0.928], [0.213 - co * 0.213 + si * 0.143, 0.715 + co * 0.285 + si * 0.14, 0.072 - co * 0.072 - si * 0.283], [0.213 - co * 0.213 - si * 0.787, 0.715 - co * 0.715 + si * 0.715, 0.072 + co * 0.928 + si * 0.072]];
+  const Sm = [[0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s], [0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s], [0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s]];
+  const M = Sm.map((r) => [0, 1, 2].map((j) => r[0] * Hm[0][j] + r[1] * Hm[1][j] + r[2] * Hm[2][j]));
+  for (let i = 0; i < p.length; i += 4) {
+    const r = p[i], g = p[i + 1], b = p[i + 2];
+    p[i] = (M[0][0] * r + M[0][1] * g + M[0][2] * b) * br;
+    p[i + 1] = (M[1][0] * r + M[1][1] * g + M[1][2] * b) * br;
+    p[i + 2] = (M[2][0] * r + M[2][1] * g + M[2][2] * b) * br;
+  }
+  x.putImageData(d, 0, 0);
+  return c;
+}
 const DEF_W = { banner: 0.6, shape: 0.25, name: 0.5, accessory: 0.3, sticker: 0.2, pattern: 1, logo: 0.2 };
 
 export function mountStudio(root, skin, H, opts = {}) {
@@ -20,6 +40,8 @@ export function mountStudio(root, skin, H, opts = {}) {
   const key = 'studio:' + skin.id + (opts.template ? ':' + opts.template.id : '');
   let layers = [], sel = null, hist = [], fut = [], tab = 'banner', query = '', liveSnap = null, drag = null, snap0 = null;
   const pts = new Map();
+  let snapOn = true, tplId = opts.template ? opts.template.id : null;
+  const guides = {};
   let seq = 0;
   const nid = () => 'L' + ++seq + Date.now().toString(36);
   const fonts = () => [...S.fonts.map((f) => f.family), ...H.BASE_FONTS];
@@ -28,7 +50,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   const snap = () => JSON.stringify(layers);
 
   /* ---------- layout ---------- */
-  const tabs = [...KINDS, ['text', '✏', 'Text'], ['layers', '☰', 'Layers']];
+  const tabs = [...KINDS, ...(H.toggleFav ? [['fav', '⭐', 'Favorites']] : []), ['text', '✏', 'Text'], ['layers', '☰', 'Layers']];
   root.innerHTML = `<div class="wrap studio">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px"><a href="${opts.admin ? '#/templates' : '#/studio'}" class="mut small">← Back</a><h2 class="grad" style="font-size:20px">${esc(skin.name)}</h2>${opts.admin ? '<span class="badge new">TEMPLATE BUILDER</span>' : opts.own ? '<span class="badge free">MY PNG</span>' : `<span class="badge ${skin.type}">${skin.type === 'paid' ? '⚡ ' + skin.price + ' CR' : 'FREE'}</span>`}${opts.template ? `<span class="badge paid">TEMPLATE: ${esc(opts.template.name)}</span>` : ''}</div>
     <div class="st-grid">
@@ -38,16 +60,17 @@ export function mountStudio(root, skin, H, opts = {}) {
           <button class="tb" data-act="undo" title="Undo (Ctrl+Z)">↶</button><button class="tb" data-act="redo" title="Redo">↷</button><i class="vsep"></i>
           <button class="tb" data-act="dup" title="Duplicate">⧉</button><button class="tb" data-act="flip" title="Mirror / উল্টানো">⇋</button><button class="tb" data-act="up" title="Bring forward">⬆</button><button class="tb" data-act="down" title="Send back">⬇</button><button class="tb" data-act="del" title="Delete">🗑</button><i class="vsep"></i>
           <label class="mut small">Opacity</label><input type="range" id="op" min="0.1" max="1" step="0.05" value="1" style="width:110px"><i class="vsep"></i>
-          <button class="tb wide" data-act="clear">Clear all</button><button class="tb wide" data-act="save" title="ডিজাইন ফাইল হিসেবে সেভ">💾 Save</button><button class="tb wide" data-act="open" title="সেভ করা ডিজাইন ফাইল খুলুন">📂 Open</button><input type="file" id="openF" accept=".json,application/json" class="hide">
+          <button class="tb wide on" data-act="snap" title="Snap / Guide লাইন">🧲 Snap</button><button class="tb wide" data-act="clear">Clear all</button><button class="tb wide" data-act="save" title="ডিজাইন ফাইল হিসেবে সেভ">💾 Save</button><button class="tb wide" data-act="open" title="সেভ করা ডিজাইন ফাইল খুলুন">📂 Open</button><input type="file" id="openF" accept=".json,application/json" class="hide">
           <div id="tctl" class="hide st-text">
             <input class="inp" id="tt" placeholder="লেখা…" maxlength="40">
             <select class="inp" id="tf"></select>
             <input class="inp" type="color" id="tc" title="Text color"><input class="inp" type="color" id="ts" title="Outline color">
             <input type="range" id="tw" min="0" max="0.25" step="0.01" title="Outline" style="width:90px">
           </div>
+          <div id="rctl" class="hide st-text"><b class="mut small">🎨 COLOR</b><label class="mut small">Hue</label><input type="range" id="rh" min="-180" max="180" step="1"><label class="mut small">Saturation</label><input type="range" id="rs" min="0" max="2" step="0.05"><label class="mut small">Brightness</label><input type="range" id="rb" min="0.3" max="1.7" step="0.05"><button class="tb wide" id="rr">Reset</button></div>
         </div>
         <div class="card" style="padding:12px"><div class="stage2" id="stg"><img id="base" alt=""></div><p class="c mut small" style="margin-top:8px">টেনে সরান · কোণার ডট দিয়ে বড়-ছোট · উপরের লাল ডট দিয়ে ঘোরান · দুই আঙুলে pinch</p></div>
-        ${opts.admin ? `<div class="card st-export"><div style="flex:1;min-width:240px"><span class="mut small">TEMPLATE INFO</span><div class="row" style="margin-top:6px"><input class="inp" id="tpName" maxlength="40" placeholder="Template name" value="${esc((opts.template && opts.template.name) || '')}"><input class="inp" id="tpCat" maxlength="30" placeholder="Category (optional)" value="${esc((opts.template && opts.template.category) || '')}"></div></div><button class="btn big" id="tpSave">💾 Save template</button></div>` : `<div class="card st-export"><div><span class="mut small">EXPORT COST</span><div id="costTx" style="font-family:var(--hf);font-size:18px"></div></div><button class="btn big" id="exp">⬇ Export PNG</button></div>`}
+        ${opts.admin ? `<div class="card st-export"><div style="flex:1;min-width:240px"><span class="mut small">TEMPLATE INFO</span><div class="row" style="margin-top:6px"><input class="inp" id="tpName" maxlength="40" placeholder="Template name" value="${esc((opts.template && opts.template.name) || '')}"><input class="inp" id="tpCat" maxlength="30" placeholder="Category (optional)" value="${esc((opts.template && opts.template.category) || '')}"><input class="inp" id="tpPrice" type="number" min="0" placeholder="Extra price" title="Template এর আলাদা দাম (credits), 0 = বিনামূল্যে" value="${(opts.template && opts.template.price) || 0}" style="max-width:120px"></div></div><button class="btn big" id="tpSave">💾 Save template</button></div>` : `<div class="card st-export"><div><span class="mut small">EXPORT COST</span><div id="costTx" style="font-family:var(--hf);font-size:18px"></div></div><button class="btn big" id="exp">⬇ Export PNG</button></div>`}
       </section>
     </div></div>`;
   const stg = q$('#stg'), base = q$('#base');
@@ -63,7 +86,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     Object.assign(el.style, { left: l.x * 100 + '%', top: l.y * 100 + '%', transform: `translate(-50%,-50%) rotate(${l.rot || 0}deg)`, opacity: l.op ?? 1 });
     const inn = el.firstChild;
     inn.style.transform = l.flip ? 'scaleX(-1)' : '';
-    if (l.t === 'img') el.style.width = l.w * 100 + '%';
+    if (l.t === 'img') { el.style.width = l.w * 100 + '%'; inn.style.filter = filt(l); }
     else {
       el.style.width = 'auto';
       const fs = l.fs * W;
@@ -115,6 +138,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     if (a === 'undo') return undo();
     if (a === 'redo') return redo();
     if (a === 'clear') { if (layers.length && confirm('সব layer মুছে ফেলবেন?')) mutate(() => { layers = []; sel = null; }); return; }
+    if (a === 'snap') { snapOn = !snapOn; q$('[data-act="snap"]').classList.toggle('on', snapOn); return; }
     if (a === 'save') return saveFile();
     if (a === 'open') return q$('#openF').click();
     if (!l) return toast('আগে একটি layer সিলেক্ট করুন', 'err');
@@ -132,9 +156,18 @@ export function mountStudio(root, skin, H, opts = {}) {
     el.oninput = () => live(() => { const l = cur(); if (l && l.t === 'text') l[k] = k === 'strokeW' ? +el.value : el.value; });
     el.onchange = () => { if (k === 'font') H.ensureFont(el.value); endLive(); };
   });
+  [['#rh', 'hue'], ['#rs', 'sat'], ['#rb', 'bri']].forEach(([id, k]) => {
+    const el = q$(id);
+    el.oninput = () => live(() => { const l = cur(); if (l && l.t === 'img') l[k] = +el.value; });
+    el.onchange = endLive;
+  });
+  q$('#rr').onclick = () => { const l = cur(); if (l && l.t === 'img') mutate(() => { l.hue = 0; l.sat = 1; l.bri = 1; }); };
   function tools() {
     const l = cur();
     q$('#tctl').classList.toggle('hide', !(l && l.t === 'text'));
+    const isImg = !!l && l.t === 'img';
+    q$('#rctl').classList.toggle('hide', !isImg);
+    if (isImg) { q$('#rh').value = l.hue || 0; q$('#rs').value = l.sat ?? 1; q$('#rb').value = l.bri ?? 1; }
     q$('#op').value = l ? l.op ?? 1 : 1;
     if (l && l.t === 'text') { q$('#tt').value = l.text; q$('#tf').value = l.font; q$('#tc').value = l.color; q$('#ts').value = l.stroke; q$('#tw').value = l.strokeW; }
     qa('[data-act="undo"]')[0].disabled = !hist.length;
@@ -158,12 +191,31 @@ export function mountStudio(root, skin, H, opts = {}) {
     drag = { mode, sx: e.clientX, sy: e.clientY, x0: l.x, y0: l.y, w0: l.w, fs0: l.fs, rot0: l.rot || 0, cx, cy, d0: Math.hypot(e.clientX - cx, e.clientY - cy) || 1 };
   }
   const setScale = (l, k) => { if (l.t === 'img') l.w = clamp(drag.w0 * k, 0.03, 3); else l.fs = clamp(drag.fs0 * k, 0.015, 0.6); };
+  function showGuide(kind, pos) {
+    let g = guides[kind];
+    if (pos == null) { if (g) { g.remove(); guides[kind] = null; } return; }
+    if (!g) { g = document.createElement('div'); g.className = 'gl ' + kind; stg.appendChild(g); guides[kind] = g; }
+    if (kind === 'v') g.style.left = pos * 100 + '%'; else g.style.top = pos * 100 + '%';
+  }
+  function snapMove(l) {
+    if (!snapOn) { showGuide('v', null); showGuide('h', null); return; }
+    const el = elOf(l.id), thr = 0.012;
+    const hw = el ? el.offsetWidth / 2 / stg.clientWidth : 0, hh = el ? el.offsetHeight / 2 / stg.clientHeight : 0;
+    const plain = Math.abs((l.rot || 0) % 180) < 1;
+    const others = layers.filter((o) => o.id !== l.id);
+    let gx = null, gy = null;
+    for (const t of [0.5, ...others.map((o) => o.x)]) if (Math.abs(l.x - t) < thr) { l.x = t; gx = t; break; }
+    if (gx === null && plain) { if (Math.abs(l.x - hw) < thr) { l.x = hw; gx = 0; } else if (Math.abs(l.x + hw - 1) < thr) { l.x = 1 - hw; gx = 1; } }
+    for (const t of [0.5, ...others.map((o) => o.y)]) if (Math.abs(l.y - t) < thr) { l.y = t; gy = t; break; }
+    if (gy === null && plain) { if (Math.abs(l.y - hh) < thr) { l.y = hh; gy = 0; } else if (Math.abs(l.y + hh - 1) < thr) { l.y = 1 - hh; gy = 1; } }
+    showGuide('v', gx); showGuide('h', gy);
+  }
   function onMove(e) {
     if (!drag) return;
     if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const l = cur(); if (!l) return;
     const r = stg.getBoundingClientRect();
-    if (drag.mode === 'move') { l.x = clamp(drag.x0 + (e.clientX - drag.sx) / r.width, -0.2, 1.2); l.y = clamp(drag.y0 + (e.clientY - drag.sy) / r.height, -0.2, 1.2); }
+    if (drag.mode === 'move') { l.x = clamp(drag.x0 + (e.clientX - drag.sx) / r.width, -0.2, 1.2); l.y = clamp(drag.y0 + (e.clientY - drag.sy) / r.height, -0.2, 1.2); snapMove(l); }
     else if (drag.mode === 'scale') setScale(l, Math.hypot(e.clientX - drag.cx, e.clientY - drag.cy) / drag.d0);
     else if (drag.mode === 'rot') l.rot = Math.round((Math.atan2(e.clientY - drag.cy, e.clientX - drag.cx) * 180) / Math.PI + 90);
     else if (drag.mode === 'pinch' && pts.size >= 2) {
@@ -175,6 +227,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   }
   function onUp(e) {
     pts.delete(e.pointerId);
+    showGuide('v', null); showGuide('h', null);
     if (!drag) return;
     if (drag.mode === 'pinch' ? pts.size < 2 : pts.size === 0) {
       if (snap0 !== null && snap0 !== snap()) { push(snap0); save(); cost(); tools(); }
@@ -217,14 +270,16 @@ export function mountStudio(root, skin, H, opts = {}) {
       qa('.lrow', p).forEach((r) => (r.onclick = () => { sel = r.dataset.id; refreshSel(); }));
       return;
     }
-    const list = S.assets.filter((a) => a.kind === tab && (!query || (a.name || '').toLowerCase().includes(query.toLowerCase())));
-    p.innerHTML = `<input class="inp" id="aq" placeholder="🔍 Search…" value="${esc(query)}" style="margin-bottom:10px">${list.length ? `<div class="agrid">${list.map((a) => `<div class="ai" draggable="true" data-id="${a.id}" title="${esc(a.name)}"><img loading="lazy" src="${esc(a.thumb && a.type === 'free' ? a.preview : a.preview)}" alt=""><span class="badge ${a.type}">${a.type === 'paid' ? '⚡' + a.price : 'FREE'}</span></div>`).join('')}</div>` : '<p class="mut small" style="padding:16px 4px">এই ক্যাটাগরিতে এখনো কিছু নেই।</p>'}`;
+    const favs = H.favs ? H.favs() : {};
+    const list = S.assets.filter((a) => (tab === 'fav' ? favs[a.id] : a.kind === tab) && (!query || (a.name || '').toLowerCase().includes(query.toLowerCase())));
+    p.innerHTML = `<input class="inp" id="aq" placeholder="🔍 Search…" value="${esc(query)}" style="margin-bottom:10px">${list.length ? `<div class="agrid">${list.map((a) => `<div class="ai" draggable="true" data-id="${a.id}" title="${esc(a.name)}"><img loading="lazy" src="${esc(a.thumb && a.type === 'free' ? a.preview : a.preview)}" alt=""><span class="badge ${a.type}">${a.type === 'paid' ? '⚡' + a.price : 'FREE'}</span>${H.toggleFav ? `<button class="fv ${favs[a.id] ? 'on' : ''}" data-f="${a.id}" title="Favorite">★</button>` : ''}</div>`).join('')}</div>` : `<p class="mut small" style="padding:16px 4px">${tab === 'fav' ? 'যেকোনো ডিজাইনের ★ চাপলে এখানে জমা হবে।' : 'এই ক্যাটাগরিতে এখনো কিছু নেই।'}</p>`}`;
     const aq = q$('#aq'); aq.oninput = () => { query = aq.value; const pos = aq.selectionStart; panel(); const n = q$('#aq'); n.focus(); n.setSelectionRange(pos, pos); };
     qa('.ai', p).forEach((c) => {
       const a = assetOf(c.dataset.id);
       c.onclick = () => addAsset(a);
       c.ondragstart = (e) => e.dataTransfer.setData('text/plain', a.id);
     });
+    qa('.fv', p).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); H.toggleFav(b.dataset.f); }));
   }
   qa('.st-tab').forEach((b) => (b.onclick = () => { tab = b.dataset.t; query = ''; panel(); }));
 
@@ -234,6 +289,8 @@ export function mountStudio(root, skin, H, opts = {}) {
     const sp = !opts.own && skin.type === 'paid';
     let c = sp ? Number(skin.price) || 1 : 0, paidN = sp ? 1 : 0;
     ids.forEach((id) => { const a = assetOf(id); if (a && a.type === 'paid') { c += Number(a.price) || 1; paidN++; } });
+    const tp = tplId ? Number(((S.templates || []).find((t) => t.id === tplId) || {}).price) || 0 : 0;
+    if (tp) { c += tp; paidN++; }
     return { ids, cost: c, paidN };
   }
   function cost() {
@@ -270,7 +327,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     else if (S.cfg.ads && S.cfg.ads.enabled !== false) { const r = await H.runAd('download', skin.id); if (!r) return; sid = r.sid; }
     const old = btn.textContent; btn.disabled = true; btn.textContent = 'Preparing…';
     try {
-      const pre = await H.api('/api/export/prepare', { skinId: skin.id, assetIds: ids, sid });
+      const pre = await H.api('/api/export/prepare', { skinId: skin.id, assetIds: ids, sid, templateId: tplId });
       btn.textContent = 'Rendering…';
       const [baseBmp, ...bmps] = await Promise.all([opts.own ? createImageBitmap(opts.own) : getFile(pre.token, skin.id), ...ids.map((id) => getFile(pre.token, id))]);
       const map = Object.fromEntries(ids.map((id, i) => [id, bmps[i]]));
@@ -285,7 +342,7 @@ export function mountStudio(root, skin, H, opts = {}) {
         x.translate(l.x * W, l.y * Hh);
         x.rotate(((l.rot || 0) * Math.PI) / 180);
         if (l.flip) x.scale(-1, 1);
-        if (l.t === 'img') { const b = map[l.aid]; const w = l.w * W, h = w * (b.height / b.width); x.drawImage(b, -w / 2, -h / 2, w, h); }
+        if (l.t === 'img') { const b0 = map[l.aid]; const b = filt(l) ? recolor(b0, l) : b0; const w = l.w * W, h = w * (b0.height / b0.width); x.drawImage(b, -w / 2, -h / 2, w, h); }
         else {
           const fs = l.fs * W;
           x.font = `800 ${fs}px "${l.font}", sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
@@ -316,7 +373,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       if (l.t === 'img') {
         const a = assetOf(String(l.aid));
         if (!a) { missing++; return; }
-        out.push({ ...base, t: 'img', aid: a.id, url: a.preview, name: a.name, ar: a.ar || 1, w: num(l.w, 0.3, 0.03, 3) });
+        out.push({ ...base, t: 'img', aid: a.id, url: a.preview, name: a.name, ar: a.ar || 1, w: num(l.w, 0.3, 0.03, 3), hue: num(l.hue, 0, -180, 180), sat: num(l.sat, 1, 0, 2), bri: num(l.bri, 1, 0.3, 1.7) });
       } else if (l.t === 'text') {
         out.push({ ...base, t: 'text', text: String(l.text || '').slice(0, 60), font: String(l.font || fonts()[0]).slice(0, 60), color: col(l.color, '#ffffff'), stroke: col(l.stroke, '#000000'), strokeW: num(l.strokeW, 0.08, 0, 0.25), fs: num(l.fs, 0.08, 0.015, 0.6) });
       }
@@ -324,9 +381,9 @@ export function mountStudio(root, skin, H, opts = {}) {
     if (missing) toast(`${missing}টি ডিজাইন আর নেই, সেগুলো বাদ দেওয়া হয়েছে`, 'err');
     return out;
   }
-  const clean = () => layers.map((l) => (l.t === 'img' ? { t: 'img', aid: l.aid, x: l.x, y: l.y, w: l.w, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1 } : { t: 'text', text: l.text, font: l.font, color: l.color, stroke: l.stroke, strokeW: l.strokeW, fs: l.fs, x: l.x, y: l.y, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1 }));
+  const clean = () => layers.map((l) => (l.t === 'img' ? { t: 'img', aid: l.aid, x: l.x, y: l.y, w: l.w, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1, hue: l.hue || 0, sat: l.sat ?? 1, bri: l.bri ?? 1 } : { t: 'text', text: l.text, font: l.font, color: l.color, stroke: l.stroke, strokeW: l.strokeW, fs: l.fs, x: l.x, y: l.y, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1 }));
   function saveFile() {
-    const blob = new Blob([JSON.stringify({ app: 'bussid-studio', v: 1, skinId: skin.id, layers: clean() })], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ app: 'bussid-studio', v: 1, skinId: skin.id, tpl: tplId, layers: clean() })], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = (skin.name + '-design').replace(/[^\w\-]+/g, '_') + '.json';
@@ -340,6 +397,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       if (f.size > 1e6) throw new Error('ফাইল অনেক বড়');
       const d = JSON.parse(await f.text());
       if (d.app !== 'bussid-studio' || !Array.isArray(d.layers)) throw new Error('এটি Studio এর ডিজাইন ফাইল নয়');
+      if (d.tpl && (S.templates || []).some((t) => t.id === d.tpl)) tplId = d.tpl;
       mutate(() => { layers = hydrate(d.layers); sel = null; });
       toast('ডিজাইন খোলা হয়েছে 📂');
     } catch (er) { toast(er.message || 'ফাইল পড়া যায়নি', 'err'); }
@@ -350,7 +408,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       if (!name) return toast('Template এর নাম দিন', 'err');
       if (!layers.length) return toast('কোনো ডিজাইন যোগ করা হয়নি', 'err');
       const b = ev.currentTarget; b.disabled = true;
-      try { await opts.admin.onSave({ name, category: q$('#tpCat').value.trim(), layers: clean() }); } catch (e) { toast(e.message, 'err'); }
+      try { await opts.admin.onSave({ name, category: q$('#tpCat').value.trim(), price: Math.max(0, Math.floor(+q$('#tpPrice').value || 0)), layers: clean() }); } catch (e) { toast(e.message, 'err'); }
       b.disabled = false;
     };
   }
