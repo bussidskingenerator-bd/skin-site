@@ -16,7 +16,7 @@ const db = getDatabase(app);
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const S = { user: null, me: null, admin: false, cfg: {}, skins: [], fonts: [], assets: [], cats: [], stats: {}, orders: [], tx: [], ready: {}, view: '', f: { q: '', cat: '', type: '', sort: 'new' }, unsubs: [] };
+const S = { user: null, me: null, admin: false, cfg: {}, skins: [], fonts: [], assets: [], templates: [], cats: [], stats: {}, orders: [], tx: [], ready: {}, view: '', f: { q: '', cat: '', type: '', sort: 'new' }, unsubs: [] };
 const BASE_FONTS = ['Arial', 'Impact', 'Verdana', 'Georgia', 'Courier New', 'Trebuchet MS'];
 const fmtDate = (t) => new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -155,7 +155,8 @@ const arr = (o) => Object.entries(o || {}).map(([id, v]) => ({ id, ...v }));
 onValue(ref(db, 'config'), (s) => { S.cfg = s.val() || {}; S.ready.cfg = true; applyCfg(); });
 onValue(ref(db, 'skins'), (s) => { S.skins = arr(s.val()).filter((x) => x.active !== false).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); S.ready.skins = true; refresh(); });
 onValue(ref(db, 'fonts'), (s) => { S.fonts = arr(s.val()); syncFonts(); });
-onValue(ref(db, 'assets'), (s) => { S.assets = arr(s.val()).filter((x) => x.active !== false).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); S.editorRefresh && S.editorRefresh(); });
+onValue(ref(db, 'assets'), (s) => { S.assets = arr(s.val()).filter((x) => x.active !== false).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); S.ready.assets = true; S.editorRefresh ? S.editorRefresh() : !S.made && route(); });
+onValue(ref(db, 'templates'), (s) => { S.templates = arr(s.val()).filter((x) => x.active !== false).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); S.ready.templates = true; S.editorRefresh ? null : !S.made && route(); });
 onValue(ref(db, 'categories'), (s) => { S.cats = arr(s.val()).sort((a, b) => (a.order || 0) - (b.order || 0)); });
 onValue(ref(db, 'stats'), (s) => { S.stats = s.val() || {}; const el = $('#stDl'); if (el) el.textContent = S.stats.downloads || 0; });
 
@@ -191,13 +192,13 @@ function route() {
   S.made = false;
   S.studioDestroy && S.studioDestroy();
   S.studioDestroy = null; S.editorRefresh = null;
-  const [p, arg] = (location.hash.replace(/^#\/?/, '') || 'home').split('/');
+  const [p, arg, arg2] = (location.hash.replace(/^#\/?/, '') || 'home').split('/');
   S.view = ['home', 'skins', 'make', 'studio', 'wallet'].includes(p) ? p : 'home';
   $$('#nav a,#tabbar a[data-p]').forEach((a) => a.classList.toggle('on', a.dataset.p === (S.view === 'make' ? 'skins' : S.view)));
   const v = $('#view');
-  if (!S.ready.cfg || !S.ready.skins) { v.innerHTML = '<div class="spin"></div>'; return; }
+  if (!S.ready.cfg || !S.ready.skins || !S.ready.assets || !S.ready.templates) { v.innerHTML = '<div class="spin"></div>'; return; }
   S.redraw = null;
-  ({ home: viewHome, skins: viewSkins, make: () => viewMake(arg), studio: () => viewStudio(arg), wallet: viewWallet })[S.view]();
+  ({ home: viewHome, skins: viewSkins, make: () => viewMake(arg), studio: () => viewStudio(arg, arg2), wallet: viewWallet })[S.view]();
 }
 
 /* ================= views ================= */
@@ -401,21 +402,69 @@ function runAd(purpose, skinId) {
 }
 
 /* ---------- studio ---------- */
-function viewStudio(id) {
+function tplMini(t) {
+  const sk = S.skins.find((x) => x.id === t.skinId);
+  if (!sk) return '';
+  const L = (t.layers || []).map((l) => {
+    const pos = `left:${(l.x * 100).toFixed(2)}%;top:${(l.y * 100).toFixed(2)}%;transform:translate(-50%,-50%) rotate(${l.rot || 0}deg);opacity:${l.op ?? 1}`;
+    if (l.t === 'img') {
+      const a = S.assets.find((x) => x.id === l.aid);
+      return a ? `<div class="ml" style="${pos};width:${(l.w * 100).toFixed(2)}%"><img src="${esc(a.preview)}" alt="" style="${l.flip ? 'transform:scaleX(-1)' : ''}"></div>` : '';
+    }
+    const fs = (l.fs * 100).toFixed(2);
+    return `<div class="ml mtx" style="${pos};font-size:${fs}cqw;font-family:'${esc(l.font)}',sans-serif;color:${esc(l.color)};-webkit-text-stroke:${((l.strokeW || 0) * fs).toFixed(2)}cqw ${esc(l.stroke)};paint-order:stroke fill"><span style="display:inline-block;${l.flip ? 'transform:scaleX(-1)' : ''}">${esc(l.text)}</span></div>`;
+  }).join('');
+  return `<div class="card glow skin tpl" data-id="${t.id}"><div class="im mm"><div class="mini" style="aspect-ratio:${sk.w || 1}/${sk.h || 1}"><img class="bs" src="${esc(sk.preview)}" alt="">${L}</div><div class="tags"><span class="badge new">TEMPLATE</span></div></div><div class="meta"><h4>${esc(t.name)}</h4><div><span>${esc(t.category || '—')}</span><span>${esc(sk.name)}</span></div></div></div>`;
+}
+
+function viewStudio(id, tid) {
   const v = $('#view');
+  if (id === 'own') {
+    if (!S.ownFile) { location.hash = '#/studio'; return; }
+    S.made = true;
+    const skin = { id: 'own', name: 'My skin', type: 'free', preview: S.ownUrl, own: true };
+    const ctl = mountStudio(v, skin, studioCtx(), { own: S.ownFile });
+    S.studioDestroy = ctl.destroy;
+    return;
+  }
   if (!id) {
-    const l = S.skins;
-    v.innerHTML = `<div class="wrap sec"><div class="sec-h"><h2>Skin <span class="grad">Studio</span></h2></div><p class="mut" style="margin-bottom:18px">একটি base skin বেছে নিন — তারপর Banner, Shape, Sticker, Name design ইত্যাদি টেনে এনে নিজের মতো সাজান।</p><div class="grid" id="sg">${l.length ? l.map(skinCard).join('') : '<div class="empty" style="grid-column:1/-1">এখনো কোনো skin নেই</div>'}</div></div>`;
-    bindSkinCards($('#sg'), 'studio');
+    const tab = S.stTab || 'tpl';
+    v.innerHTML = `<div class="wrap sec"><div class="sec-h"><h2>Skin <span class="grad">Studio</span></h2></div>
+      <div class="chips" style="margin-bottom:20px"><span class="chip ${tab === 'tpl' ? 'on' : ''}" data-t="tpl">🎯 Ready Templates</span><span class="chip ${tab === 'skin' ? 'on' : ''}" data-t="skin">🚌 Base skins</span><span class="chip ${tab === 'own' ? 'on' : ''}" data-t="own">📤 My own PNG</span></div><div id="stc"></div></div>`;
+    $$('.chips .chip', v).forEach((c) => (c.onclick = () => { S.stTab = c.dataset.t; clearTimers(); viewStudio(); }));
+    const box = $('#stc');
+    if (tab === 'tpl') {
+      const l = S.templates.filter((t) => S.skins.some((x) => x.id === t.skinId));
+      box.innerHTML = `<p class="mut" style="margin-bottom:16px">তৈরি করা ডিজাইন বেছে নিন — খুলে নিজের নাম বসান বা যেকোনো কিছু বদলান।</p><div class="grid">${l.length ? l.map(tplMini).join('') : '<div class="empty" style="grid-column:1/-1">এখনো কোনো template নেই</div>'}</div>`;
+      $$('.tpl', box).forEach((c) => (c.onclick = () => { const t = S.templates.find((x) => x.id === c.dataset.id); location.hash = '#/studio/' + t.skinId + '/' + t.id; }));
+    } else if (tab === 'skin') {
+      const l = S.skins;
+      box.innerHTML = `<p class="mut" style="margin-bottom:16px">একটি base skin বেছে নিন — তারপর Banner, Shape, Sticker, Name design ইত্যাদি টেনে এনে নিজের মতো সাজান।</p><div class="grid" id="sg">${l.length ? l.map(skinCard).join('') : '<div class="empty" style="grid-column:1/-1">এখনো কোনো skin নেই</div>'}</div>`;
+      bindSkinCards($('#sg'), 'studio');
+    } else {
+      box.innerHTML = `<div class="card glow" style="max-width:560px"><h3 class="grad" style="margin-bottom:8px">নিজের Skin PNG দিয়ে শুরু করুন</h3><p class="mut" style="margin-bottom:14px">আপনার নিজের বানানো BUSSID skin/template (PNG বা JPG) সিলেক্ট করুন, তারপর আমাদের সব ডিজাইন দিয়ে সাজান।</p><input class="inp" type="file" id="ownF" accept="image/png,image/jpeg"><p class="mut small" style="margin-top:10px">🔒 আপনার ফাইল আপলোড হয় না — শুধু আপনার ব্রাউজারেই থাকে। শুধু ব্যবহার করা Paid ডিজাইনের দাম লাগে; সব Free হলে ১টি ad।</p></div>`;
+      $('#ownF').onchange = (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        if (!/^image\/(png|jpeg)$/.test(f.type)) return toast('শুধু PNG বা JPG দিন', 'err');
+        if (f.size > 30 * 1024 * 1024) return toast('ফাইল ৩০MB এর বেশি', 'err');
+        if (S.ownUrl) URL.revokeObjectURL(S.ownUrl);
+        S.ownFile = f; S.ownUrl = URL.createObjectURL(f);
+        location.hash = '#/studio/own';
+      };
+    }
     return;
   }
   const skin = S.skins.find((s) => s.id === id);
-  if (!skin) { v.innerHTML = '<div class="wrap empty">Skin পাওয়া যায়নি। <a href="#/studio">← Skins</a></div>'; return; }
-  if (skin.releaseAt && skin.releaseAt > Date.now()) { v.innerHTML = '<div class="wrap empty">এই skin শীঘ্রই আসছে ⏳ <a href="#/studio">← Skins</a></div>'; return; }
+  if (!skin) { v.innerHTML = '<div class="wrap empty">Skin পাওয়া যায়নি। <a href="#/studio">← Studio</a></div>'; return; }
+  if (skin.releaseAt && skin.releaseAt > Date.now()) { v.innerHTML = '<div class="wrap empty">এই skin শীঘ্রই আসছে ⏳ <a href="#/studio">← Studio</a></div>'; return; }
+  const tpl = tid ? S.templates.find((t) => t.id === tid) : null;
+  if (tid && !tpl) toast('Template পাওয়া যায়নি', 'err');
   S.made = true;
-  const ctl = mountStudio(v, skin, { S, esc, toast, modal, api, runAd, auth, API, loginModal, BASE_FONTS, ensureFont, onAssets: (f) => (S.editorRefresh = f) });
+  const ctl = mountStudio(v, skin, studioCtx(), { template: tpl });
   S.studioDestroy = ctl.destroy;
 }
+const studioCtx = () => ({ S, esc, toast, modal, api, runAd, auth, API, loginModal, BASE_FONTS, ensureFont, onAssets: (f) => (S.editorRefresh = f) });
 
 /* ---------- wallet ---------- */
 function viewWallet() {

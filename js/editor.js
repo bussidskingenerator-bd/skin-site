@@ -12,12 +12,12 @@ export const KINDS = [
 ];
 const DEF_W = { banner: 0.6, shape: 0.25, name: 0.5, accessory: 0.3, sticker: 0.2, pattern: 1, logo: 0.2 };
 
-export function mountStudio(root, skin, H) {
+export function mountStudio(root, skin, H, opts = {}) {
   const { S, esc, toast, modal } = H;
   const q$ = (s, r = root) => r.querySelector(s);
   const qa = (s, r = root) => [...r.querySelectorAll(s)];
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-  const key = 'studio:' + skin.id;
+  const key = 'studio:' + skin.id + (opts.template ? ':' + opts.template.id : '');
   let layers = [], sel = null, hist = [], fut = [], tab = 'banner', query = '', liveSnap = null, drag = null, snap0 = null;
   const pts = new Map();
   let seq = 0;
@@ -30,7 +30,7 @@ export function mountStudio(root, skin, H) {
   /* ---------- layout ---------- */
   const tabs = [...KINDS, ['text', '✏', 'Text'], ['layers', '☰', 'Layers']];
   root.innerHTML = `<div class="wrap studio">
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px"><a href="#/studio" class="mut small">← Skins</a><h2 class="grad" style="font-size:20px">${esc(skin.name)}</h2><span class="badge ${skin.type}">${skin.type === 'paid' ? '⚡ ' + skin.price + ' CR' : 'FREE'}</span></div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px"><a href="${opts.admin ? '#/templates' : '#/studio'}" class="mut small">← Back</a><h2 class="grad" style="font-size:20px">${esc(skin.name)}</h2>${opts.admin ? '<span class="badge new">TEMPLATE BUILDER</span>' : opts.own ? '<span class="badge free">MY PNG</span>' : `<span class="badge ${skin.type}">${skin.type === 'paid' ? '⚡ ' + skin.price + ' CR' : 'FREE'}</span>`}${opts.template ? `<span class="badge paid">TEMPLATE: ${esc(opts.template.name)}</span>` : ''}</div>
     <div class="st-grid">
       <aside class="card st-side"><div class="st-tabs" id="tabs">${tabs.map((t) => `<button class="st-tab" data-t="${t[0]}" title="${t[2]}"><span>${t[1]}</span><small>${t[2]}</small></button>`).join('')}</div><div class="st-body" id="panel"></div></aside>
       <section class="st-main">
@@ -38,7 +38,7 @@ export function mountStudio(root, skin, H) {
           <button class="tb" data-act="undo" title="Undo (Ctrl+Z)">↶</button><button class="tb" data-act="redo" title="Redo">↷</button><i class="vsep"></i>
           <button class="tb" data-act="dup" title="Duplicate">⧉</button><button class="tb" data-act="flip" title="Mirror / উল্টানো">⇋</button><button class="tb" data-act="up" title="Bring forward">⬆</button><button class="tb" data-act="down" title="Send back">⬇</button><button class="tb" data-act="del" title="Delete">🗑</button><i class="vsep"></i>
           <label class="mut small">Opacity</label><input type="range" id="op" min="0.1" max="1" step="0.05" value="1" style="width:110px"><i class="vsep"></i>
-          <button class="tb wide" data-act="clear">Clear all</button>
+          <button class="tb wide" data-act="clear">Clear all</button><button class="tb wide" data-act="save" title="ডিজাইন ফাইল হিসেবে সেভ">💾 Save</button><button class="tb wide" data-act="open" title="সেভ করা ডিজাইন ফাইল খুলুন">📂 Open</button><input type="file" id="openF" accept=".json,application/json" class="hide">
           <div id="tctl" class="hide st-text">
             <input class="inp" id="tt" placeholder="লেখা…" maxlength="40">
             <select class="inp" id="tf"></select>
@@ -47,7 +47,7 @@ export function mountStudio(root, skin, H) {
           </div>
         </div>
         <div class="card" style="padding:12px"><div class="stage2" id="stg"><img id="base" alt=""></div><p class="c mut small" style="margin-top:8px">টেনে সরান · কোণার ডট দিয়ে বড়-ছোট · উপরের লাল ডট দিয়ে ঘোরান · দুই আঙুলে pinch</p></div>
-        <div class="card st-export"><div><span class="mut small">EXPORT COST</span><div id="costTx" style="font-family:var(--hf);font-size:18px"></div></div><button class="btn big" id="exp">⬇ Export PNG</button></div>
+        ${opts.admin ? `<div class="card st-export"><div style="flex:1;min-width:240px"><span class="mut small">TEMPLATE INFO</span><div class="row" style="margin-top:6px"><input class="inp" id="tpName" maxlength="40" placeholder="Template name" value="${esc((opts.template && opts.template.name) || '')}"><input class="inp" id="tpCat" maxlength="30" placeholder="Category (optional)" value="${esc((opts.template && opts.template.category) || '')}"></div></div><button class="btn big" id="tpSave">💾 Save template</button></div>` : `<div class="card st-export"><div><span class="mut small">EXPORT COST</span><div id="costTx" style="font-family:var(--hf);font-size:18px"></div></div><button class="btn big" id="exp">⬇ Export PNG</button></div>`}
       </section>
     </div></div>`;
   const stg = q$('#stg'), base = q$('#base');
@@ -89,7 +89,7 @@ export function mountStudio(root, skin, H) {
   function refreshSel() { layers.forEach((l) => { const el = elOf(l.id); el && el.classList.toggle('sel', l.id === sel); }); tools(); if (tab === 'layers') panel(); }
 
   /* ---------- history ---------- */
-  const save = () => { try { localStorage.setItem(key, snap()); } catch (e) {} };
+  const save = () => { if (opts.admin) return; try { localStorage.setItem(key, snap()); } catch (e) {} };
   function push(before) { hist.push(before); if (hist.length > 60) hist.shift(); fut = []; }
   function full() { renderStage(); tools(); cost(); if (tab === 'layers') panel(); save(); }
   function mutate(fn) { const b = snap(); fn(); push(b); full(); }
@@ -115,6 +115,8 @@ export function mountStudio(root, skin, H) {
     if (a === 'undo') return undo();
     if (a === 'redo') return redo();
     if (a === 'clear') { if (layers.length && confirm('সব layer মুছে ফেলবেন?')) mutate(() => { layers = []; sel = null; }); return; }
+    if (a === 'save') return saveFile();
+    if (a === 'open') return q$('#openF').click();
     if (!l) return toast('আগে একটি layer সিলেক্ট করুন', 'err');
     if (a === 'del') mutate(() => { layers = layers.filter((x) => x.id !== l.id); sel = null; });
     if (a === 'dup') mutate(() => { const c = { ...l, id: nid(), x: clamp(l.x + 0.04, 0, 1), y: clamp(l.y + 0.04, 0, 1) }; layers.push(c); sel = c.id; });
@@ -229,11 +231,13 @@ export function mountStudio(root, skin, H) {
   /* ---------- cost ---------- */
   function calc() {
     const ids = [...new Set(layers.filter((l) => l.t === 'img').map((l) => l.aid))];
-    let c = skin.type === 'paid' ? Number(skin.price) || 1 : 0, paidN = skin.type === 'paid' ? 1 : 0;
+    const sp = !opts.own && skin.type === 'paid';
+    let c = sp ? Number(skin.price) || 1 : 0, paidN = sp ? 1 : 0;
     ids.forEach((id) => { const a = assetOf(id); if (a && a.type === 'paid') { c += Number(a.price) || 1; paidN++; } });
     return { ids, cost: c, paidN };
   }
   function cost() {
+    if (!q$('#costTx')) return;
     const { cost: c, paidN } = calc();
     const adOn = S.cfg.ads && S.cfg.ads.enabled !== false;
     q$('#costTx').innerHTML = c > 0 ? `<span style="color:var(--warn)">⚡ ${c} credits</span> <span class="mut small">(${paidN} paid item)</span>` : `<span style="color:var(--ok)">FREE</span> <span class="mut small">${adOn ? '· ১টি ad দেখতে হবে' : ''}</span>`;
@@ -256,7 +260,7 @@ export function mountStudio(root, skin, H) {
       if (i) throw new Error((await r.json().catch(() => ({}))).error || 'File আনা যায়নি');
     }
   }
-  q$('#exp').onclick = async (ev) => {
+  if (q$('#exp')) q$('#exp').onclick = async (ev) => {
     const btn = ev.currentTarget;
     if (!S.user) return H.loginModal('Login করে Export করুন');
     if (!layers.length && !confirm('কোনো ডিজাইন যোগ করা হয়নি। শুধু base skin Export করবেন?')) return;
@@ -268,7 +272,7 @@ export function mountStudio(root, skin, H) {
     try {
       const pre = await H.api('/api/export/prepare', { skinId: skin.id, assetIds: ids, sid });
       btn.textContent = 'Rendering…';
-      const [baseBmp, ...bmps] = await Promise.all([getFile(pre.token, skin.id), ...ids.map((id) => getFile(pre.token, id))]);
+      const [baseBmp, ...bmps] = await Promise.all([opts.own ? createImageBitmap(opts.own) : getFile(pre.token, skin.id), ...ids.map((id) => getFile(pre.token, id))]);
       const map = Object.fromEntries(ids.map((id, i) => [id, bmps[i]]));
       const W = baseBmp.width, Hh = baseBmp.height;
       const cv = document.createElement('canvas'); cv.width = W; cv.height = Hh;
@@ -299,11 +303,66 @@ export function mountStudio(root, skin, H) {
     btn.disabled = false; btn.textContent = old;
   };
 
+  /* ---------- design file (save / open) + hydrate ---------- */
+  const num = (v, d, a, b) => (Number.isFinite(+v) ? clamp(+v, a, b) : d);
+  const col = (v, d) => (/^#[0-9a-f]{3,8}$/i.test(String(v)) ? String(v) : d);
+  // ফাইল/template থেকে আসা layer নিরাপদ করে তোলে; asset না থাকলে বাদ
+  function hydrate(list) {
+    let missing = 0;
+    const out = [];
+    (Array.isArray(list) ? list : []).slice(0, 80).forEach((l) => {
+      if (!l || typeof l !== 'object') return;
+      const base = { id: nid(), x: num(l.x, 0.5, -0.5, 1.5), y: num(l.y, 0.5, -0.5, 1.5), rot: num(l.rot, 0, -3600, 3600), flip: !!l.flip, op: num(l.op, 1, 0.05, 1) };
+      if (l.t === 'img') {
+        const a = assetOf(String(l.aid));
+        if (!a) { missing++; return; }
+        out.push({ ...base, t: 'img', aid: a.id, url: a.preview, name: a.name, ar: a.ar || 1, w: num(l.w, 0.3, 0.03, 3) });
+      } else if (l.t === 'text') {
+        out.push({ ...base, t: 'text', text: String(l.text || '').slice(0, 60), font: String(l.font || fonts()[0]).slice(0, 60), color: col(l.color, '#ffffff'), stroke: col(l.stroke, '#000000'), strokeW: num(l.strokeW, 0.08, 0, 0.25), fs: num(l.fs, 0.08, 0.015, 0.6) });
+      }
+    });
+    if (missing) toast(`${missing}টি ডিজাইন আর নেই, সেগুলো বাদ দেওয়া হয়েছে`, 'err');
+    return out;
+  }
+  const clean = () => layers.map((l) => (l.t === 'img' ? { t: 'img', aid: l.aid, x: l.x, y: l.y, w: l.w, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1 } : { t: 'text', text: l.text, font: l.font, color: l.color, stroke: l.stroke, strokeW: l.strokeW, fs: l.fs, x: l.x, y: l.y, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1 }));
+  function saveFile() {
+    const blob = new Blob([JSON.stringify({ app: 'bussid-studio', v: 1, skinId: skin.id, layers: clean() })], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (skin.name + '-design').replace(/[^\w\-]+/g, '_') + '.json';
+    a.click();
+    toast('ডিজাইন ফাইল সেভ হয়েছে 💾');
+  }
+  q$('#openF').onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    try {
+      if (f.size > 1e6) throw new Error('ফাইল অনেক বড়');
+      const d = JSON.parse(await f.text());
+      if (d.app !== 'bussid-studio' || !Array.isArray(d.layers)) throw new Error('এটি Studio এর ডিজাইন ফাইল নয়');
+      mutate(() => { layers = hydrate(d.layers); sel = null; });
+      toast('ডিজাইন খোলা হয়েছে 📂');
+    } catch (er) { toast(er.message || 'ফাইল পড়া যায়নি', 'err'); }
+  };
+  if (opts.admin && q$('#tpSave')) {
+    q$('#tpSave').onclick = async (ev) => {
+      const name = q$('#tpName').value.trim();
+      if (!name) return toast('Template এর নাম দিন', 'err');
+      if (!layers.length) return toast('কোনো ডিজাইন যোগ করা হয়নি', 'err');
+      const b = ev.currentTarget; b.disabled = true;
+      try { await opts.admin.onSave({ name, category: q$('#tpCat').value.trim(), layers: clean() }); } catch (e) { toast(e.message, 'err'); }
+      b.disabled = false;
+    };
+  }
+
   /* ---------- init ---------- */
-  try {
-    const d = JSON.parse(localStorage.getItem(key) || 'null');
-    if (Array.isArray(d) && d.length) { layers = d; toast('আগের ডিজাইন ফিরিয়ে আনা হয়েছে (Clear all চাপলে নতুন শুরু)'); }
-  } catch (e) {}
+  if (opts.template) layers = hydrate(opts.template.layers);
+  else if (!opts.admin) {
+    try {
+      const d = JSON.parse(localStorage.getItem(key) || 'null');
+      if (Array.isArray(d) && d.length) { layers = d; toast('আগের ডিজাইন ফিরিয়ে আনা হয়েছে (Clear all চাপলে নতুন শুরু)'); }
+    } catch (e) {}
+  }
   renderStage(); tools(); cost(); panel();
   H.onAssets(() => { if (tab !== 'text') panel(); cost(); });
   return {
