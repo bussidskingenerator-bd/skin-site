@@ -6,6 +6,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { getDatabase, ref, onValue, get, query, limitToLast } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 import { drawZones, groupLabels } from './render.js';
+import { mountStudio } from './editor.js';
 
 const app = initializeApp(FIREBASE);
 const auth = getAuth(app);
@@ -15,7 +16,7 @@ const db = getDatabase(app);
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const S = { user: null, me: null, admin: false, cfg: {}, skins: [], fonts: [], cats: [], stats: {}, orders: [], tx: [], ready: {}, view: '', f: { q: '', cat: '', type: '', sort: 'new' }, unsubs: [] };
+const S = { user: null, me: null, admin: false, cfg: {}, skins: [], fonts: [], assets: [], cats: [], stats: {}, orders: [], tx: [], ready: {}, view: '', f: { q: '', cat: '', type: '', sort: 'new' }, unsubs: [] };
 const BASE_FONTS = ['Arial', 'Impact', 'Verdana', 'Georgia', 'Courier New', 'Trebuchet MS'];
 const fmtDate = (t) => new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -149,11 +150,12 @@ function accountModal() {
 }
 
 /* ================= data ================= */
-const refresh = () => { if (!(S.view === 'make' && S.made)) route(); };
+const refresh = () => { if (!((S.view === 'make' || S.view === 'studio') && S.made)) route(); };
 const arr = (o) => Object.entries(o || {}).map(([id, v]) => ({ id, ...v }));
 onValue(ref(db, 'config'), (s) => { S.cfg = s.val() || {}; S.ready.cfg = true; applyCfg(); });
 onValue(ref(db, 'skins'), (s) => { S.skins = arr(s.val()).filter((x) => x.active !== false).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); S.ready.skins = true; refresh(); });
 onValue(ref(db, 'fonts'), (s) => { S.fonts = arr(s.val()); syncFonts(); });
+onValue(ref(db, 'assets'), (s) => { S.assets = arr(s.val()).filter((x) => x.active !== false).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); S.editorRefresh && S.editorRefresh(); });
 onValue(ref(db, 'categories'), (s) => { S.cats = arr(s.val()).sort((a, b) => (a.order || 0) - (b.order || 0)); });
 onValue(ref(db, 'stats'), (s) => { S.stats = s.val() || {}; const el = $('#stDl'); if (el) el.textContent = S.stats.downloads || 0; });
 
@@ -187,13 +189,15 @@ window.addEventListener('hashchange', route);
 function route() {
   clearTimers();
   S.made = false;
+  S.studioDestroy && S.studioDestroy();
+  S.studioDestroy = null; S.editorRefresh = null;
   const [p, arg] = (location.hash.replace(/^#\/?/, '') || 'home').split('/');
-  S.view = ['home', 'skins', 'make', 'wallet'].includes(p) ? p : 'home';
+  S.view = ['home', 'skins', 'make', 'studio', 'wallet'].includes(p) ? p : 'home';
   $$('#nav a,#tabbar a[data-p]').forEach((a) => a.classList.toggle('on', a.dataset.p === (S.view === 'make' ? 'skins' : S.view)));
   const v = $('#view');
   if (!S.ready.cfg || !S.ready.skins) { v.innerHTML = '<div class="spin"></div>'; return; }
   S.redraw = null;
-  ({ home: viewHome, skins: viewSkins, make: () => viewMake(arg), wallet: viewWallet })[S.view]();
+  ({ home: viewHome, skins: viewSkins, make: () => viewMake(arg), studio: () => viewStudio(arg), wallet: viewWallet })[S.view]();
 }
 
 /* ================= views ================= */
@@ -202,11 +206,11 @@ function skinCard(s) {
   const isNew = Date.now() - (s.createdAt || 0) < 7 * 864e5;
   return `<div class="card glow skin" data-id="${s.id}"><div class="im"><img loading="lazy" src="${esc(s.preview)}" alt="${esc(s.name)}"><div class="tags"><span class="badge ${s.type}">${s.type === 'paid' ? '⚡ ' + s.price + ' CR' : 'FREE'}</span>${isNew ? '<span class="badge new">NEW</span>' : ''}</div>${soon ? `<div class="soon" data-end="${s.releaseAt}"><small>COMING SOON</small>${cdHtml(true)}</div>` : ''}</div><div class="meta"><h4>${esc(s.name)}</h4><div><span>${esc(s.category || '—')}</span><span>⬇ ${s.downloads || 0}</span></div></div></div>`;
 }
-function bindSkinCards(root) {
+function bindSkinCards(root, to = 'make') {
   $$('.skin', root).forEach((c) => (c.onclick = () => {
     const s = S.skins.find((x) => x.id === c.dataset.id);
     if (s.releaseAt && s.releaseAt > Date.now()) return toast('এই skin টি শীঘ্রই আসছে ⏳', 'err');
-    location.hash = '#/make/' + s.id;
+    location.hash = '#/' + to + '/' + s.id;
   }));
   $$('.soon', root).forEach((el) => bindCd($('.cd', el), +el.dataset.end, () => route()));
 }
@@ -235,7 +239,7 @@ function viewHome() {
     <section class="hero"><span class="chip-ai">✦ AI-Powered Skin Generator</span>
       <h1 class="grad">${esc((cfg.site && cfg.site.headline) || 'Create Your Bus Skin in Seconds')}</h1>
       <p>${esc((cfg.site && cfg.site.tagline) || 'পছন্দের skin বাছুন, বাসের নাম লিখুন, Generate চাপুন — আপনার নাম বসে যাবে নিজে থেকেই। ডাউনলোড করে সোজা BUSSID এ।')}</p>
-      <div class="cta"><a class="btn big" href="#/skins">Browse Skins</a><a class="btn ghost big" href="#/wallet">Get Credits</a></div>
+      <div class="cta"><a class="btn big" href="#/skins">Browse Skins</a><a class="btn ghost big" href="#/studio">🎨 Studio</a><a class="btn ghost big" href="#/wallet">Get Credits</a></div>
       <div class="stats"><div class="card stat"><b class="grad">${tot}</b><span>Skins</span></div><div class="card stat"><b class="grad" id="stDl">${S.stats.downloads || 0}</b><span>Downloads</span></div><div class="card stat"><b class="grad">${S.skins.filter((x) => x.type === 'free').length}</b><span>Free</span></div></div>
     </section>
     ${showCd ? `<div class="card glow event"><div><h3 class="grad">${esc(c.title || 'Special Event')}</h3><p class="mut">${esc(c.text || '')}</p></div>${cdHtml()}${c.link ? `<a class="btn" href="${esc(c.link)}" target="_blank" rel="noopener">${esc(c.btn || 'Join')}</a>` : ''}</div>` : ''}
@@ -298,6 +302,7 @@ function viewMake(id) {
           <input class="inp" data-i="${i}" data-k="text" maxlength="40" placeholder="${esc(z.label)} এ কী লিখবেন…">
           <div class="row" style="margin-top:8px"><select class="inp" data-i="${i}" data-k="font">${fontNames.map((f) => `<option ${f === vals[z.label].font ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select><input class="inp" type="color" data-i="${i}" data-k="color" value="${esc(vals[z.label].color)}"></div></div>`).join('') : '<p class="mut">এই skin এ লেখার জায়গা সেট করা নেই।</p>'}
         <button class="btn big" id="genBtn" style="width:100%">⚡ Generate &amp; Download</button>
+        <a class="btn ghost" href="#/studio/${skin.id}" style="width:100%;margin-top:10px">🎨 Open in Studio (banner, shape, sticker…)</a>
       </div></div></div></div>`;
   const cv = $('#cv'), ctx = cv.getContext('2d');
   const img = new Image();
@@ -393,6 +398,23 @@ function runAd(purpose, skinId) {
     }, 400);
     go.onclick = () => ov.close();
   });
+}
+
+/* ---------- studio ---------- */
+function viewStudio(id) {
+  const v = $('#view');
+  if (!id) {
+    const l = S.skins;
+    v.innerHTML = `<div class="wrap sec"><div class="sec-h"><h2>Skin <span class="grad">Studio</span></h2></div><p class="mut" style="margin-bottom:18px">একটি base skin বেছে নিন — তারপর Banner, Shape, Sticker, Name design ইত্যাদি টেনে এনে নিজের মতো সাজান।</p><div class="grid" id="sg">${l.length ? l.map(skinCard).join('') : '<div class="empty" style="grid-column:1/-1">এখনো কোনো skin নেই</div>'}</div></div>`;
+    bindSkinCards($('#sg'), 'studio');
+    return;
+  }
+  const skin = S.skins.find((s) => s.id === id);
+  if (!skin) { v.innerHTML = '<div class="wrap empty">Skin পাওয়া যায়নি। <a href="#/studio">← Skins</a></div>'; return; }
+  if (skin.releaseAt && skin.releaseAt > Date.now()) { v.innerHTML = '<div class="wrap empty">এই skin শীঘ্রই আসছে ⏳ <a href="#/studio">← Skins</a></div>'; return; }
+  S.made = true;
+  const ctl = mountStudio(v, skin, { S, esc, toast, modal, api, runAd, auth, API, loginModal, BASE_FONTS, ensureFont, onAssets: (f) => (S.editorRefresh = f) });
+  S.studioDestroy = ctl.destroy;
 }
 
 /* ---------- wallet ---------- */
