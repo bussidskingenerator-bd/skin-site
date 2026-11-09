@@ -133,7 +133,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   const key = 'studio:' + skin.id + (opts.template ? ':' + opts.template.id : '');
   let layers = [], sel = null, hist = [], fut = [], tab = 'banner', query = '', liveSnap = null, drag = null, snap0 = null;
   const pts = new Map(), vpts = new Map(), msel = new Set(), locals = new Map();
-  let vz = null, baseHid = false, editPts = false, selNode = -1, lastSel = null;
+  let vz = null, baseHid = false, editPts = false, selNode = -1, lastSel = null, baseIdx = 0;
   const Z = { z: 1, x: 0, y: 0 };
   let snapOn = true, tplId = opts.template ? opts.template.id : null;
   const guides = {};
@@ -226,7 +226,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   const elOf = (id) => stg.querySelector(`.ly[data-id="${id}"]`);
   function place(el, l) {
     const W = stg.clientWidth || 600, sy = l.sy || 1, fl = l.flip ? -1 : 1, fv = l.flv ? -1 : 1, c = cur();
-    Object.assign(el.style, { mixBlendMode: l.bm && l.bm !== 'normal' ? l.bm : '', display: l.hid ? 'none' : '', left: l.x * 100 + '%', top: l.y * 100 + '%', transform: `translate(-50%,-50%) rotate(${l.rot || 0}deg)`, opacity: l.op ?? 1 });
+    Object.assign(el.style, { zIndex: (layers.indexOf(l) + 1) * 2, mixBlendMode: l.bm && l.bm !== 'normal' ? l.bm : '', display: l.hid ? 'none' : '', left: l.x * 100 + '%', top: l.y * 100 + '%', transform: `translate(-50%,-50%) rotate(${l.rot || 0}deg)`, opacity: l.op ?? 1 });
     const inn = el.firstChild;
     el.classList.toggle('tl', l.t === 'text');
     if (l.t === 'text') {
@@ -261,7 +261,10 @@ export function mountStudio(root, skin, H, opts = {}) {
     el.classList.toggle('gm', !!l.gid && !!c && c.gid === l.gid && l.id !== sel);
     el.style.setProperty('--gc', l.gid ? gcol(l.gid) : 'transparent');
   }
+  const bIdx = () => Math.min(Math.max(baseIdx, 0), layers.length);
+  const applyBase = () => { base.style.zIndex = bIdx() * 2 + 1; };
   function renderStage() {
+    applyBase();
     qa('.ly', stg).forEach((e) => e.remove());
     layers.forEach((l) => {
       const el = document.createElement('div');
@@ -601,8 +604,15 @@ export function mountStudio(root, skin, H, opts = {}) {
     }
     if (tab === 'layers') {
       const act2 = `<div class="lact"><button class="btn sm" id="gM">🔗 Merge</button><button class="btn ghost sm" id="gS">Ungroup</button><button class="btn ghost sm" id="gC">⧉ Copy</button><button class="btn danger sm" id="gD">🗑 Delete</button></div><p class="mut small" style="margin:6px 0 10px">২+ layer টিক দিয়ে <b>Merge</b> চাপলে সেগুলো একসাথে সরবে, বড়-ছোট হবে ও ঘুরবে। 👁 দিয়ে hide/show।</p>`;
-      p.innerHTML = act2 + (layers.length ? [...layers].reverse().map((l) => `<div class="lrow ${l.id === sel ? 'on' : ''} ${l.hid ? 'hid' : ''}" data-id="${l.id}"><input type="checkbox" class="chk" data-m ${msel.has(l.id) ? 'checked' : ''}><span class="lth">${l.t === 'img' ? `<img src="${esc(l.url)}" alt="">` : l.t === 'shape' ? shapeSvg({ ...l, sw: 0 }, '0', 'lt' + l.id) : 'T'}</span><span class="lnm">${esc(l.t === 'text' ? l.text : l.t === 'shape' ? (SHAPES.find((s) => s[0] === l.k) || [0, 'Shape'])[1] : l.name)}</span>${l.gid ? `<i class="gtag" style="background:${gcol(l.gid)}" title="Group"></i>` : ''}<button class="lck" data-u title="উপরে আনুন">▲</button><button class="lck" data-dn title="নিচে নামান">▼</button><button class="lck" data-h title="Hide / Show">${l.hid ? '🚫' : '👁'}</button><button class="lck" data-x title="Delete">🗑</button></div>`).join('') : '<p class="mut small">কোনো layer নেই। ডিজাইন, Shape বা Text যোগ করুন।</p>') + `<div class="lrow base ${baseHid ? 'hid' : ''}"><span class="lth"><img src="${esc(skin.preview)}" alt=""></span><span class="lnm">${opts.own ? 'Imported skin (base)' : 'Base skin'}</span><button class="lck" data-bh title="Hide / Show">${baseHid ? '🚫' : '👁'}</button></div>`;
+      const rowOf = (l) => `<div class="lrow ${l.id === sel ? 'on' : ''} ${l.hid ? 'hid' : ''}" data-id="${l.id}"><input type="checkbox" class="chk" data-m ${msel.has(l.id) ? 'checked' : ''}><span class="lth">${l.t === 'img' ? `<img src="${esc(l.url)}" alt="">` : l.t === 'shape' ? shapeSvg({ ...l, sw: 0 }, '0', 'lt' + l.id) : 'T'}</span><span class="lnm">${esc(l.t === 'text' ? l.text : l.t === 'shape' ? (SHAPES.find((s) => s[0] === l.k) || [0, 'Shape'])[1] : l.name)}</span>${l.gid ? `<i class="gtag" style="background:${gcol(l.gid)}" title="Group"></i>` : ''}<button class="lck" data-u title="উপরে আনুন">▲</button><button class="lck" data-dn title="নিচে নামান">▼</button><button class="lck" data-h title="Hide / Show">${l.hid ? '🚫' : '👁'}</button><button class="lck" data-x title="Delete">🗑</button></div>`;
+      const baseRow = `<div class="lrow base ${baseHid ? 'hid' : ''}"><span class="lth"><img src="${esc(skin.preview)}" alt=""></span><span class="lnm">${opts.own ? 'Imported skin (base)' : 'Base skin'}</span><button class="lck" data-bu title="উপরে আনুন (layer এর উপরে)">▲</button><button class="lck" data-bdn title="নিচে নামান (layer এর নিচে)">▼</button><button class="lck" data-bh title="Hide / Show">${baseHid ? '🚫' : '👁'}</button></div>`;
+      let rows = '';
+      for (let i = layers.length - 1; i >= 0; i--) { if (i === bIdx() - 1) rows += baseRow; rows += rowOf(layers[i]); }
+      if (bIdx() === 0) rows += baseRow;
+      p.innerHTML = act2 + (layers.length ? '' : '<p class="mut small">কোনো layer নেই। ডিজাইন, Shape বা Text যোগ করুন।</p>') + rows;
       q$('#gM', p).onclick = mergeSel; q$('#gS', p).onclick = splitSel; q$('#gD', p).onclick = delSel; q$('#gC', p).onclick = copyTicked;
+      q$('[data-bu]', p).onclick = () => { if (baseIdx < layers.length) { baseIdx = bIdx() + 1; applyBase(); panel(); } };
+      q$('[data-bdn]', p).onclick = () => { if (baseIdx > 0) { baseIdx = bIdx() - 1; applyBase(); panel(); } };
       q$('[data-bh]', p).onclick = () => { baseHid = !baseHid; base.style.visibility = baseHid ? 'hidden' : ''; panel(); };
       qa('.lrow[data-id]', p).forEach((r) => {
         const mv = (d) => mutate(() => { const i = layers.findIndex((x) => x.id === r.dataset.id), j = i + d; if (i >= 0 && j >= 0 && j < layers.length) [layers[i], layers[j]] = [layers[j], layers[i]]; });
@@ -712,9 +722,11 @@ export function mountStudio(root, skin, H, opts = {}) {
       const W = baseBmp.width, Hh = baseBmp.height;
       const cv = document.createElement('canvas'); cv.width = W; cv.height = Hh;
       const x = cv.getContext('2d');
-      if (!baseHid) x.drawImage(baseBmp, 0, 0);
       await Promise.all(vis.filter((l) => l.t === 'text').map((l) => H.ensureFont(l.font)));
-      for (const l of vis) {
+      for (let li = 0; li <= layers.length; li++) {
+        if (li === bIdx() && !baseHid) x.drawImage(baseBmp, 0, 0);
+        const l = layers[li];
+        if (!l || l.hid) continue;
         const sy = l.sy || 1;
         x.save();
         x.globalAlpha = l.op ?? 1;
@@ -790,7 +802,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       : { t: 'text', text: l.text, font: l.font, color: l.color, stroke: l.stroke, strokeW: l.strokeW, fs: l.fs, ...(l.grad ? { grad: true, ang: l.ang ?? 45, fill2: l.fill2 || '#8b5cf6', g3: !!l.g3, fill3: l.fill3 || '#ff2e93' } : {}), ...common(l) }));
   function saveFile() {
     if (layers.some((l) => l.local)) toast('নিজের ছবিগুলো ফাইলে সেভ হবে না (শুধু Export এ আসে)', 'err');
-    const blob = new Blob([JSON.stringify({ app: 'bussid-studio', v: 2, skinId: skin.id, tpl: tplId, layers: clean() })], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ app: 'bussid-studio', v: 2, skinId: skin.id, tpl: tplId, bi: bIdx(), layers: clean() })], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = (skin.name + '-design').replace(/[^\w\-]+/g, '_') + '.json';
@@ -805,7 +817,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       const d = JSON.parse(await f.text());
       if (d.app !== 'bussid-studio' || !Array.isArray(d.layers)) throw new Error('এটি Studio এর ডিজাইন ফাইল নয়');
       if (d.tpl && (S.templates || []).some((t) => t.id === d.tpl)) tplId = d.tpl;
-      mutate(() => { layers = hydrate(d.layers); sel = null; msel.clear(); });
+      mutate(() => { layers = hydrate(d.layers); sel = null; msel.clear(); baseIdx = clamp(Math.floor(+d.bi || 0), 0, layers.length); });
       toast('ডিজাইন খোলা হয়েছে 📂');
     } catch (er) { toast(er.message || 'ফাইল পড়া যায়নি', 'err'); }
   };

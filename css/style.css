@@ -301,3 +301,4 @@ footer{border-top:1px solid var(--line);margin-top:50px;padding:30px 0;color:var
 .ly .nd{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:#fff;border:2px solid var(--c1);z-index:4;touch-action:none;cursor:pointer;transform:scale(calc(1/var(--z,1)));box-shadow:0 0 0 2px rgba(0,0,0,.5)}
 .ly .nd.on{background:var(--c3);border-color:#fff}
 @media(max-width:860px){.ly .nd{width:24px;height:24px;margin:-12px 0 0 -12px}}
+.gl{z-index:9999}
