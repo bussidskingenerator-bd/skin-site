@@ -61,6 +61,21 @@ export function shapeD(l) {
 const hexc = (v, d) => (/^#[0-9a-f]{3,8}$/i.test(String(v)) ? String(v) : d);
 export const BLENDS = ['normal', 'multiply', 'darken', 'lighten', 'overlay', 'screen', 'soft-light', 'hard-light', 'color-dodge', 'color-burn', 'difference', 'exclusion'];
 export const gradStops = (l) => [hexc(l.t === 'text' ? l.color : l.fill, '#00e5ff'), hexc(l.fill2, '#8b5cf6'), ...(l.g3 ? [hexc(l.fill3, '#ff2e93')] : [])];
+export const rgbaOf = (hex, a) => { const h = hexc(hex, '#000000').slice(1), f = h.length === 3 ? h.replace(/./g, '$&$&') : h.slice(0, 6); return `rgba(${parseInt(f.slice(0, 2), 16)},${parseInt(f.slice(2, 4), 16)},${parseInt(f.slice(4, 6), 16)},${a})`; };
+const nnum = (v, d) => (Number.isFinite(+v) ? +v : d);
+export const shadowCss = (l, W) => (l.shadow ? `drop-shadow(${nnum(l.shx, 0) * W}px ${nnum(l.shy, 0) * W}px ${nnum(l.shb, 0.03) * W}px ${rgbaOf(l.shc, 0.7)})` : '');
+function tintCv(bmp, l) {
+  const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+  const x = c.getContext('2d'); x.drawImage(bmp, 0, 0);
+  x.globalCompositeOperation = 'source-atop'; x.globalAlpha = l.tna ?? 1;
+  if (l.grad) {
+    const a = ((l.ang ?? 45) * Math.PI) / 180, co = Math.cos(a), si = Math.sin(a), w = c.width, h = c.height, g = x.createLinearGradient(w / 2 - (co * w) / 2, h / 2 - (si * h) / 2, w / 2 + (co * w) / 2, h / 2 + (si * h) / 2);
+    gradStops(l).forEach((cl, i, arr) => g.addColorStop(i / (arr.length - 1), cl));
+    x.fillStyle = g;
+  } else x.fillStyle = hexc(l.fill, '#00e5ff');
+  x.fillRect(0, 0, c.width, c.height);
+  return c;
+}
 export function shapeSvg(l, swCss, gid = 'g') {
   const a = ((Number.isFinite(+l.ang) ? +l.ang : 45) * Math.PI) / 180, c = Math.cos(a) * 50, s = Math.sin(a) * 50;
   const f1 = hexc(l.fill, '#00e5ff'), st = gradStops(l);
@@ -76,15 +91,17 @@ export function miniLayersHtml(list, assetOf, esc) {
   return (list || []).map((l) => {
     if (!l || l.hid) return '';
     const sy = n(l.sy, 1), fl = l.flip ? -1 : 1, fv = l.flv ? -1 : 1, bmx = l.bm && BLENDS.includes(l.bm) && l.bm !== 'normal' ? `;mix-blend-mode:${l.bm}` : '';
-    const pos = `left:${(n(l.x, 0.5) * 100).toFixed(2)}%;top:${(n(l.y, 0.5) * 100).toFixed(2)}%;opacity:${n(l.op, 1)}${bmx}`;
+    const shm = l.shadow ? `;filter:drop-shadow(${n(l.shx, 0) * 100}cqw ${n(l.shy, 0) * 100}cqw ${n(l.shb, 0.03) * 100}cqw ${rgbaOf(l.shc, 0.7)})` : '';
+    const pos = `left:${(n(l.x, 0.5) * 100).toFixed(2)}%;top:${(n(l.y, 0.5) * 100).toFixed(2)}%;opacity:${n(l.op, 1)}${bmx}${shm}`;
     const tr = `translate(-50%,-50%) rotate(${n(l.rot, 0)}deg)`;
     if (l.t === 'img') {
       const a = assetOf(l.aid);
-      return a ? `<div class="ml" style="${pos};transform:${tr};width:${(n(l.w, 0.3) * 100).toFixed(2)}%"><img src="${esc(a.preview)}" alt="" style="transform:scale(${fl},${sy * fv});filter:${filt(l) || 'none'}"></div>` : '';
+      const tnt = l.tint ? `<i style="position:absolute;inset:0;background:${l.grad ? `linear-gradient(${n(l.ang, 45) + 90}deg,${gradStops(l).join(',')})` : hexc(l.fill, '#00e5ff')};opacity:${n(l.tna, 1)};-webkit-mask-image:url('${esc(a ? a.preview : '')}');mask-image:url('${esc(a ? a.preview : '')}');-webkit-mask-size:100% 100%;mask-size:100% 100%"></i>` : '';
+      return a ? `<div class="ml" style="${pos};transform:${tr};width:${(n(l.w, 0.3) * 100).toFixed(2)}%"><img src="${esc(a.preview)}" alt="" style="transform:scale(${fl},${sy * fv});filter:${filt(l) || 'none'}">${tnt}</div>` : '';
     }
     if (l.t === 'shape') {
       const w = n(l.w, 0.25);
-      return `<div class="ml" style="${pos};transform:${tr};width:${(w * 100).toFixed(2)}%;aspect-ratio:1/${sy}${l.shadow ? ';filter:drop-shadow(0 0 1.5cqw rgba(0,0,0,.7))' : ''}"><div style="width:100%;height:100%${fl < 0 || fv < 0 ? `;transform:scale(${fl},${fv})` : ''}">${shapeSvg(l, (n(l.sw, 0) * w * 100).toFixed(2) + 'cqw', 'mg' + ++miniSeq)}</div></div>`;
+      return `<div class="ml" style="${pos};transform:${tr};width:${(w * 100).toFixed(2)}%;aspect-ratio:1/${sy}"><div style="width:100%;height:100%${fl < 0 || fv < 0 ? `;transform:scale(${fl},${fv})` : ''}">${shapeSvg(l, (n(l.sw, 0) * w * 100).toFixed(2) + 'cqw', 'mg' + ++miniSeq)}</div></div>`;
     }
     const fs = (n(l.fs, 0.08) * 100).toFixed(2);
     const tg = l.grad ? `;background:linear-gradient(${n(l.ang, 45) + 90}deg,${gradStops(l).join(',')});-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent` : '';
@@ -112,14 +129,15 @@ function recolor(bmp, l) {
   return c;
 }
 const DEF_W = { banner: 0.6, shape: 0.25, name: 0.5, accessory: 0.3, sticker: 0.2, pattern: 1, logo: 0.2 };
-const DEF = { op: 1, sy: 1, hue: 0, sat: 1, bri: 1, ang: 45, sw: 0, rad: 0, grad: false, shadow: false, fill: '#00e5ff', fill2: '#8b5cf6', fill3: '#ff2e93', g3: false, stroke: '#000000', bm: 'normal' };
+const DEF = { op: 1, sy: 1, hue: 0, sat: 1, bri: 1, ang: 45, sw: 0, rad: 0, grad: false, shadow: false, fill: '#00e5ff', fill2: '#8b5cf6', fill3: '#ff2e93', g3: false, stroke: '#000000', bm: 'normal', shc: '#000000', shb: 0.03, shx: 0, shy: 0, tna: 1, tint: false };
 // [selector, layer key, allowed types (null = সব), kind: n=number s=string b=bool]
 const BIND = [
   ['#op', 'op', null, 'n'], ['#sy', 'sy', null, 'n'], ['#bm', 'bm', null, 's'],
   ['#tt', 'text', ['text'], 's'], ['#tf', 'font', ['text'], 's'], ['#tc', 'color', ['text'], 's'], ['#ts', 'stroke', ['text'], 's'], 
   ['#rh', 'hue', ['img'], 'n'], ['#rs', 'sat', ['img'], 'n'], ['#rb', 'bri', ['img'], 'n'],
-  ['#sf', 'fill', ['shape'], 's'], ['#sg', 'grad', ['shape', 'text'], 'b'], ['#sf2', 'fill2', ['shape', 'text'], 's'], ['#sg3', 'g3', ['shape', 'text'], 'b'], ['#sf3', 'fill3', ['shape', 'text'], 's'], ['#sa', 'ang', ['shape', 'text'], 'n'],
-  ['#ss', 'stroke', ['shape'], 's'], ['#sh', 'shadow', ['shape'], 'b'], ['#ptS', 'sm', ['shape'], 'b'],
+  ['#sf', 'fill', ['shape', 'img'], 's'], ['#sg', 'grad', ['shape', 'text', 'img'], 'b'], ['#sf2', 'fill2', ['shape', 'text', 'img'], 's'], ['#sg3', 'g3', ['shape', 'text', 'img'], 'b'], ['#sf3', 'fill3', ['shape', 'text', 'img'], 's'], ['#sa', 'ang', ['shape', 'text', 'img'], 'n'],
+  ['#tn', 'tint', ['img'], 'b'], ['#tna', 'tna', ['img'], 'n'],
+  ['#ss', 'stroke', ['shape'], 's'], ['#sh', 'shadow', null, 'b'], ['#shc', 'shc', null, 's'], ['#shb', 'shb', null, 'n'], ['#shx', 'shx', null, 'n'], ['#shy', 'shy', null, 'n'], ['#ptS', 'sm', ['shape'], 'b'],
 ];
 
 const stepper = (id, label, presets = [0, 2, 4, 6, 8, 10, 15, 20]) => `<span class="inl stp" id="${id}"><label class="mut small">${label}</label><button class="tb" data-s="-1">−</button><b class="sv">0</b><button class="tb" data-s="1">＋</button>${presets.map((v) => `<button class="tb wide" data-v="${v}">${v}</button>`).join('')}</span>`;
@@ -159,32 +177,32 @@ export function mountStudio(root, skin, H, opts = {}) {
         <div class="card st-tools" id="tools"><button class="dclose" data-dc>✕</button>
           <button class="tb" data-act="undo" title="Undo (Ctrl+Z)">↶</button><button class="tb" data-act="redo" title="Redo">↷</button><i class="vsep"></i>
           <button class="tb" data-act="dup" title="Duplicate">⧉</button><button class="tb" data-act="flip" title="বাম↔ডান উল্টানো (Mirror)">⇋</button><button class="tb" data-act="flipv" title="উপর↕নিচ উল্টানো">⇅</button><button class="tb" data-act="up" title="Bring forward">⬆</button><button class="tb" data-act="down" title="Send back">⬇</button><button class="tb" data-act="del" title="Delete">🗑</button><i class="vsep"></i>
-          <label class="mut small">Opacity</label><input type="range" id="op" min="0.1" max="1" step="0.05" value="1" style="width:100px">
-          <label class="mut small">Blend</label><select class="inp" id="bm" style="width:auto;padding:6px 8px">${BLENDS.map((b) => `<option>${b}</option>`).join('')}</select>
-          <label class="mut small" title="উপর-নিচে টানা / চাপা">↕ Stretch</label><input type="range" id="sy" min="0.2" max="4" step="0.05" value="1" style="width:100px"><button class="tb wide" id="syr" title="Stretch রিসেট">1×</button><i class="vsep"></i>
           <button class="tb wide on" data-act="snap" title="Snap / Guide লাইন">🧲 Snap</button><button class="tb wide" data-act="clear">Clear all</button><button class="tb wide" data-act="save" title="ডিজাইন ফাইল হিসেবে সেভ">💾 Save</button><button class="tb wide" data-act="open" title="সেভ করা ডিজাইন ফাইল খুলুন">📂 Open</button><input type="file" id="openF" accept=".json,application/json" class="hide">
-          <div id="tctl" class="hide st-text">
-            <input class="inp" id="tt" placeholder="লেখা…" maxlength="40">
-            <select class="inp" id="tf"></select>
-            <input class="inp" type="color" id="tc" title="Text color"><input class="inp" type="color" id="ts" title="Outline color">
+        </div>
+        <div class="card props hide" id="props">
+          <div class="pchips" id="pchips"></div>
+          <div class="psec">
+            <div class="pg" data-g="text" data-t="text" data-l="✏ Text"><input class="inp" id="tt" placeholder="লেখা…" maxlength="40"><select class="inp" id="tf"></select></div>
+            <div class="pg" data-g="fill" data-t="text shape img" data-l="text:🎨 Color|shape:🎨 Fill|img:🌈 Tint">
+              <span class="inl" data-t="img"><label class="chk mut small"><input type="checkbox" id="tn"> Tint ON (ছবির উপর রং)</label><label class="mut small">Amount</label><input type="range" id="tna" min="0.1" max="1" step="0.05"></span>
+              <span class="inl" data-t="text"><label class="mut small">Color</label><input class="inp" type="color" id="tc"></span>
+              <span class="inl" data-t="shape img"><label class="mut small">Color</label><input class="inp" type="color" id="sf"></span>
+              <label class="chk mut small"><input type="checkbox" id="sg"> Gradient</label>
+              <span id="sgw" class="inl hide"><input class="inp" type="color" id="sf2" title="Color 2"><label class="chk mut small"><input type="checkbox" id="sg3"> +Color</label><input class="inp hide" type="color" id="sf3" title="Color 3"><label class="mut small">Angle</label><input type="range" id="sa" min="0" max="360" step="5"></span>
+            </div>
+            <div class="pg" data-g="stroke" data-t="text shape" data-l="✒ Stroke"><span class="inl" data-t="text"><label class="mut small">Stroke color</label><input class="inp" type="color" id="ts"></span><span class="inl" data-t="shape"><label class="mut small">Stroke color</label><input class="inp" type="color" id="ss"></span>${stepper('bdc', 'Width')}</div>
+            <div class="pg" data-g="shadow" data-t="text shape img" data-l="◐ Shadow"><label class="chk mut small"><input type="checkbox" id="sh"> Shadow ON</label><span class="inl"><label class="mut small">Color</label><input class="inp" type="color" id="shc"></span><span class="inl"><label class="mut small">Blur</label><input type="range" id="shb" min="0" max="0.06" step="0.002"></span><span class="inl"><label class="mut small">← →</label><input type="range" id="shx" min="-0.05" max="0.05" step="0.002"></span><span class="inl"><label class="mut small">↑ ↓</label><input type="range" id="shy" min="-0.05" max="0.05" step="0.002"></span></div>
+            <div class="pg" data-g="imgc" data-t="img" data-l="🎚 Adjust colors"><label class="mut small">Hue</label><input type="range" id="rh" min="-180" max="180" step="1"><label class="mut small">Saturation</label><input type="range" id="rs" min="0" max="2" step="0.05"><label class="mut small">Brightness</label><input type="range" id="rb" min="0.3" max="1.7" step="0.05"><button class="tb wide" id="rr">Reset</button></div>
+            <div class="pg" data-g="shape" data-t="shape" data-l="◆ Shape">
+              <span id="srw" class="inl hide">${stepper('rdc', 'Corner')}</span>
+              <b class="mut small" style="width:100%">✎ POINTS (বিন্দু টেনে নিজের মতো shape)</b>
+              <button class="tb wide" id="ptE">✎ Edit points</button>
+              ${stepper('ptn', 'Points', [3, 4, 6, 8, 10, 12, 15, 20])}
+              <span id="ptw" class="inl hide"><label class="chk mut small"><input type="checkbox" id="ptS"> Smooth</label><button class="tb wide" id="ptA">＋ Point</button><button class="tb wide" id="ptD">− Point</button></span>
+            </div>
+            <div class="pg" data-g="adj" data-t="text shape img" data-l="⚙ Opacity / Blend"><label class="mut small">Opacity</label><input type="range" id="op" min="0.1" max="1" step="0.05" value="1"><label class="mut small">Blend</label><select class="inp" id="bm" style="width:auto;padding:6px 8px">${BLENDS.map((b) => `<option>${b}</option>`).join('')}</select><label class="mut small" title="উপর-নিচে টানা / চাপা">↕ Stretch</label><input type="range" id="sy" min="0.2" max="4" step="0.05" value="1"><button class="tb wide" id="syr" title="Stretch রিসেট">1×</button></div>
           </div>
-          <div id="rctl" class="hide st-text"><b class="mut small">🎨 COLOR</b><label class="mut small">Hue</label><input type="range" id="rh" min="-180" max="180" step="1"><label class="mut small">Saturation</label><input type="range" id="rs" min="0" max="2" step="0.05"><label class="mut small">Brightness</label><input type="range" id="rb" min="0.3" max="1.7" step="0.05"><button class="tb wide" id="rr">Reset</button></div>
-          <div id="palc" class="st-text"><b class="mut small">🎨 COLORS</b><button class="tb wide" id="pickB" title="ছবি/স্ক্রিন থেকে রং তুলুন">💧 Pick</button><select class="inp" id="pk" style="width:auto;padding:6px 8px"><option value="fill">→ Fill / Text</option><option value="border">→ Border</option><option value="c2">→ Gradient 2</option></select><span id="pal" class="pal"></span></div>
-          <div id="bctl" class="hide st-text">${stepper('bdc', 'Border')}</div>
-          <div id="gctl" class="hide st-text"><b class="mut small">🌈 GRADIENT</b>
-            <label class="chk mut small"><input type="checkbox" id="sg"> On</label>
-            <span id="sgw" class="inl hide"><input class="inp" type="color" id="sf2" title="Color 2"><label class="chk mut small"><input type="checkbox" id="sg3"> +Color</label><input class="inp hide" type="color" id="sf3" title="Color 3"><label class="mut small">Angle</label><input type="range" id="sa" min="0" max="360" step="5"></span>
-          </div>
-          <div id="shctl" class="hide st-text"><b class="mut small">◆ SHAPE</b>
-            <span class="inl"><label class="mut small">Color</label><input class="inp" type="color" id="sf"></span>
-            <span class="inl"><label class="mut small">Border color</label><input class="inp" type="color" id="ss"></span>
-            <span id="srw" class="inl hide">${stepper('rdc', 'Corner')}</span>
-            <label class="chk mut small"><input type="checkbox" id="sh"> Shadow</label>
-            <b class="mut small" style="width:100%">✎ POINTS (বিন্দু টেনে নিজের মতো shape)</b>
-            <button class="tb wide" id="ptE">✎ Edit points</button>
-            ${stepper('ptn', 'Points', [3, 4, 6, 8, 10, 12, 15, 20])}
-            <span id="ptw" class="inl hide"><label class="chk mut small"><input type="checkbox" id="ptS"> Smooth</label><button class="tb wide" id="ptA">＋ Point</button><button class="tb wide" id="ptD">− Point</button></span>
-          </div>
+          <div id="palc" class="st-text"><b class="mut small">🎨</b><button class="tb wide" id="pickB" title="ছবি/স্ক্রিন থেকে রং তুলুন">💧 Pick</button><select class="inp" id="pk" style="width:auto;padding:6px 8px"><option value="fill">→ Fill / Text</option><option value="border">→ Border</option><option value="c2">→ Gradient 2</option></select><span id="pal" class="pal"></span></div>
         </div>
         <div class="card" style="padding:12px"><div class="vp" id="vp"><div class="stage2" id="stg"><img id="base" alt=""></div><div class="zbar"><button class="tb" id="zout" title="Zoom out">−</button><button class="tb wide" id="zfit" title="Fit">100%</button><button class="tb" id="zin" title="Zoom in">＋</button></div></div><p class="c mut small" style="margin-top:8px">টেনে সরান · কোণার ডট দিয়ে বড়-ছোট · লাল ডট দিয়ে ঘোরান · ＋/− বা দুই আঙুলে zoom · zoom করে ফাঁকা জায়গা টেনে সরান</p></div>
         ${opts.admin ? `<div class="card st-export"><div style="flex:1;min-width:240px"><span class="mut small">TEMPLATE INFO</span><div class="row" style="margin-top:6px"><input class="inp" id="tpName" maxlength="40" placeholder="Template name" value="${esc((opts.template && opts.template.name) || '')}"><input class="inp" id="tpCat" maxlength="30" placeholder="Category (optional)" value="${esc((opts.template && opts.template.category) || '')}"><input class="inp" id="tpPrice" type="number" min="0" placeholder="Extra price" title="Template এর আলাদা দাম (credits), 0 = বিনামূল্যে" value="${(opts.template && opts.template.price) || 0}" style="max-width:120px"></div></div><button class="btn big" id="tpSave">💾 Save template</button></div>` : `<div class="card st-export"><div><span class="mut small">EXPORT COST</span><div id="costTx" style="font-family:var(--hf);font-size:18px"></div></div><button class="btn big" id="exp">⬇ Export PNG</button></div>`}
@@ -238,16 +256,24 @@ export function mountStudio(root, skin, H, opts = {}) {
       Object.assign(inn.style, { fontSize: fs + 'px', fontFamily: `"${l.font}",sans-serif`, color: l.color, fontWeight: 800, webkitTextStroke: l.strokeW > 0 ? l.strokeW * fs + 'px ' + l.stroke : '0', paintOrder: 'stroke fill', transform: `scale(${fl},${sy * fv})` });
       if (l.grad) Object.assign(inn.style, { background: `linear-gradient(${(l.ang ?? 45) + 90}deg,${gradStops(l).join(',')})`, webkitBackgroundClip: 'text', backgroundClip: 'text', webkitTextFillColor: 'transparent' });
       else Object.assign(inn.style, { background: '', webkitBackgroundClip: '', backgroundClip: '', webkitTextFillColor: '' });
+      inn.style.filter = shadowCss(l, W);
       inn.textContent = l.text;
     } else if (l.t === 'shape') {
       el.classList.add('fx'); el.style.width = l.w * 100 + '%'; el.style.height = ''; el.style.aspectRatio = '1 / ' + sy;
       inn.style.transform = fl < 0 || fv < 0 ? `scale(${fl},${fv})` : '';
-      inn.style.filter = l.shadow ? `drop-shadow(0 0 ${0.03 * W}px rgba(0,0,0,.7))` : '';
+      inn.style.filter = shadowCss(l, W);
       inn.innerHTML = shapeSvg(l, (l.sw || 0) * l.w * W + 'px', 'g' + l.id);
     } else {
       el.style.width = l.w * 100 + '%'; el.style.height = '';
       if (l.nar) { el.classList.add('fx'); el.style.aspectRatio = '1 / ' + l.nar * sy; } else { el.classList.remove('fx'); el.style.aspectRatio = ''; }
-      inn.style.transform = fl < 0 || fv < 0 ? `scale(${fl},${fv})` : ''; inn.style.filter = filt(l);
+      inn.style.transform = fl < 0 || fv < 0 ? `scale(${fl},${fv})` : ''; inn.style.filter = shadowCss(l, W);
+      const im0 = inn.querySelector('img'); if (im0) im0.style.filter = filt(l);
+      let tn = inn.querySelector('.tn');
+      if (l.tint) {
+        if (!tn) { tn = document.createElement('i'); tn.className = 'tn'; inn.appendChild(tn); }
+        const u = `url("${String(l.url).replace(/"/g, '%22')}")`;
+        Object.assign(tn.style, { background: l.grad ? `linear-gradient(${(l.ang ?? 45) + 90}deg,${gradStops(l).join(',')})` : hexc(l.fill, '#00e5ff'), opacity: l.tna ?? 1, webkitMaskImage: u, maskImage: u });
+      } else if (tn) tn.remove();
     }
     qa('.nd', el).forEach((n) => n.remove());
     if (l.t === 'shape' && l.k === 'custom' && editPts && l.id === sel && Array.isArray(l.pts)) {
@@ -291,7 +317,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   /* ---------- history ---------- */
   const save = () => { if (opts.admin) return; try { localStorage.setItem(key, JSON.stringify(layers.filter((l) => !l.local))); } catch (e) {} };
   function push(before) { hist.push(before); if (hist.length > 60) hist.shift(); fut = []; }
-  function full() { renderStage(); tools(); cost(); if (tab === 'layers') panel(); save(); }
+  function full() { renderStage(); tools(); cost(); if (tab === 'layers' || tab === 'ref') panel(); save(); }
   function mutate(fn) { const b = snap(); fn(); push(b); full(); }
   function live(fn) { if (liveSnap === null) liveSnap = snap(); fn(); const l = cur(); if (l) { const el = elOf(l.id); el && place(el, l); } }
   function endLive() { if (liveSnap !== null) { if (liveSnap !== snap()) push(liveSnap); liveSnap = null; save(); cost(); tools(); } }
@@ -316,7 +342,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   }
   function addLocal(f, ref) {
     const url = URL.createObjectURL(f);
-    mutate(() => { const l = { id: nid(), t: 'img', local: true, aid: '', url, name: (ref ? '📷 ' : '') + (f.name || 'My image'), x: 0.5, y: 0.5, w: ref ? 1 : 0.4, sy: 1, rot: 0, flip: false, op: ref ? 0.5 : 1 }; if (ref) { l.ref = true; l.lock = true; } locals.set(l.id, f); layers.push(l); sel = l.id; });
+    mutate(() => { const l = { id: nid(), t: 'img', local: true, aid: '', url, name: (ref ? '📷 ' : '') + (f.name || 'My image'), x: 0.5, y: 0.5, w: ref ? 0.6 : 0.4, sy: 1, rot: 0, flip: false, op: ref ? 0.5 : 1 }; if (ref) { l.ref = true; l.lock = false; } locals.set(l.id, f); layers.push(l); sel = l.id; });
     afterAdd(false);
   }
   function addText() {
@@ -397,20 +423,31 @@ export function mountStudio(root, skin, H, opts = {}) {
   };
   q$('#syr').onclick = () => { const l = cur(); if (l) mutate(() => { l.sy = 1; }); };
   q$('#rr').onclick = () => { const l = cur(); if (l && l.t === 'img') mutate(() => { l.hue = 0; l.sat = 1; l.bri = 1; }); };
+  let pg = '';
+  const DEFG = { text: 'text', shape: 'fill', img: 'imgc' };
+  function syncProps(l) {
+    const pr = q$('#props');
+    pr.classList.toggle('hide', !l);
+    stud.dataset.sel = l ? '1' : '';
+    if (!l) return;
+    qa('[data-t]', pr).forEach((e) => e.classList.toggle('hide', !e.dataset.t.split(' ').includes(l.t)));
+    const gs = qa('.pg', pr).filter((g) => !g.classList.contains('hide'));
+    if (!gs.some((g) => g.dataset.g === pg)) pg = (gs.find((g) => g.dataset.g === DEFG[l.t]) || gs[0]).dataset.g;
+    const lab = (g) => { const d = g.dataset.l; if (!d.includes(':')) return d; const m = Object.fromEntries(d.split('|').map((x) => x.split(':'))); return m[l.t] || d; };
+    q$('#pchips').innerHTML = gs.map((g) => `<button class="pc2 ${g.dataset.g === pg ? 'on' : ''}" data-pg="${g.dataset.g}">${lab(g)}</button>`).join('');
+    gs.forEach((g) => { g.style.display = g.dataset.g === pg ? '' : 'none'; });
+  }
+  q$('#pchips').onclick = (e) => { const b = e.target.closest('[data-pg]'); if (b) { pg = b.dataset.pg; tools(); } };
   function tools() {
     const l = cur(), t = l && l.t;
-    q$('#tctl').classList.toggle('hide', t !== 'text');
-    q$('#rctl').classList.toggle('hide', t !== 'img');
-    q$('#shctl').classList.toggle('hide', t !== 'shape');
-    q$('#gctl').classList.toggle('hide', !(t === 'shape' || t === 'text'));
-    q$('#bctl').classList.toggle('hide', !(t === 'shape' || t === 'text'));
+    syncProps(l);
     if (l) {
       BIND.forEach(([id, k, types, kind]) => {
         if (types && !types.includes(l.t)) return;
         const el = q$(id), v = l[k] ?? DEF[k] ?? '';
         if (kind === 'b') el.checked = !!v; else if (document.activeElement !== el) el.value = v;
       });
-      q$('#sgw').classList.toggle('hide', !((t === 'shape' || t === 'text') && l.grad));
+      q$('#sgw').classList.toggle('hide', !l.grad);
       q$('#sf3').classList.toggle('hide', !l.g3);
       if (t === 'shape' || t === 'text') q$('#bdc .sv').textContent = STEP.bdc.get(l);
       if (t === 'shape' && l.k === 'rect') q$('#rdc .sv').textContent = STEP.rdc.get(l);
@@ -595,7 +632,8 @@ export function mountStudio(root, skin, H, opts = {}) {
       return;
     }
     if (tab === 'ref') {
-      p.innerHTML = `<p class="mut small" style="margin-bottom:12px">📷 আসল বাসের ছবি আধা-স্বচ্ছ করে ভাসিয়ে তার উপর shape/লেখা বসিয়ে কপি করুন। এই ছবি <b>Export এ আসবে না</b> আর ফাইলেও থাকবে না। ছবি lock থাকে (সরে না) — Layers এ 🔒 খুলে সরাতে পারেন। স্বচ্ছতা Tools এর Opacity দিয়ে।</p><label class="btn" style="width:100%;cursor:pointer">📷 Reference ছবি বেছে নিন<input type="file" id="refF" accept="image/png,image/jpeg,image/webp" class="hide"></label><button class="btn ghost" id="refPal" style="width:100%;margin-top:10px">🎨 ছবি থেকে রঙের Palette</button><button class="btn ghost" id="refPick" style="width:100%;margin-top:10px">💧 ছবি থেকে রং তুলুন</button>`;
+      const rl = layers.filter((l) => l.ref), R = stg.clientHeight / stg.clientWidth || 1;
+      p.innerHTML = `<p class="mut small" style="margin-bottom:10px">📷 আসল বাসের ছবি আধা-স্বচ্ছ করে ভাসিয়ে তার উপর shape/লেখা বসিয়ে কপি করুন। এই ছবি <b>Export এ আসবে না</b>, ফাইলেও থাকে না। নিচের slider দিয়ে ইচ্ছামতো ছোট-বড় ও সরান, তারপর <b>🔒 Lock</b> করুন যাতে আঁকার সময় না সরে।</p><label class="btn" style="width:100%;cursor:pointer">📷 বাসের ছবি বেছে নিন<input type="file" id="refF" accept="image/png,image/jpeg,image/webp" class="hide"></label><div class="lact" style="margin:10px 0"><button class="btn ghost sm" id="refPal">🎨 Palette নিন</button><button class="btn ghost sm" id="refPick">💧 রং তুলুন</button></div>` + rl.map((l) => `<div class="rfc" data-id="${l.id}"><b class="small">${esc(l.name)}</b>${[['op', 'Opacity', 0.1, 1, 0.05, l.op], ['w', 'Size %', 5, 300, 1, Math.round(l.w * 100)], ['x', '← → %', -20, 120, 1, Math.round(l.x * 100)], ['y', '↑ ↓ %', -20, 120, 1, Math.round(l.y * 100)]].map((r) => `<div class="rfr"><label class="mut small">${r[1]}</label><input type="range" data-k="${r[0]}" min="${r[2]}" max="${r[3]}" step="${r[4]}" value="${r[5]}"></div>`).join('')}<div class="lact"><button class="btn ghost sm" data-lk>${l.lock ? '🔓 Unlock' : '🔒 Lock'}</button><button class="btn ghost sm" data-fit>⛶ Fit</button><button class="btn danger sm" data-rm>🗑</button></div></div>`).join('');
       q$('#refF').onchange = (e) => {
         const f = e.target.files[0]; e.target.value = '';
         if (!f) return;
@@ -604,6 +642,16 @@ export function mountStudio(root, skin, H, opts = {}) {
         addLocal(f, true);
       };
       q$('#refPal').onclick = autoPalette; q$('#refPick').onclick = () => { closeDrawer(); pickColor(); };
+      qa('.rfc', p).forEach((c) => {
+        const id = c.dataset.id, L = () => layers.find((x) => x.id === id);
+        qa('input[type=range]', c).forEach((r) => {
+          r.oninput = () => { const l = L(); if (!l) return; if (liveSnap === null) liveSnap = snap(); const k = r.dataset.k; l[k] = k === 'op' ? +r.value : +r.value / 100; const el = elOf(id); el && place(el, l); };
+          r.onchange = endLive;
+        });
+        c.querySelector('[data-lk]').onclick = () => { const l = L(); l && mutate(() => { l.lock = !l.lock; }); panel(); };
+        c.querySelector('[data-fit]').onclick = () => { const l = L(); l && mutate(() => { l.w = Math.min(1, R / (l.nar || 1)); l.x = 0.5; l.y = 0.5; }); panel(); };
+        c.querySelector('[data-rm]').onclick = () => { mutate(() => { layers = layers.filter((x) => x.id !== id); if (!cur()) sel = null; }); panel(); };
+      });
       return;
     }
     if (tab === 'zones') {
@@ -657,8 +705,8 @@ export function mountStudio(root, skin, H, opts = {}) {
       return;
     }
     const favs = H.favs ? H.favs() : {};
-    const list = S.assets.filter((a) => (tab === 'fav' ? favs[a.id] : a.kind === tab) && (!query || (a.name || '').toLowerCase().includes(query.toLowerCase())));
-    p.innerHTML = `<input class="inp" id="aq" placeholder="🔍 Search…" value="${esc(query)}" style="margin-bottom:10px">${list.length ? `<div class="agrid">${list.map((a) => `<div class="ai" draggable="true" data-id="${a.id}" title="${esc(a.name)}"><img loading="lazy" src="${esc(a.preview)}" alt=""><span class="badge ${a.type}">${a.type === 'paid' ? '⚡' + a.price : 'FREE'}</span>${H.toggleFav ? `<button class="fv ${favs[a.id] ? 'on' : ''}" data-f="${a.id}" title="Favorite">★</button>` : ''}</div>`).join('')}</div>` : `<p class="mut small" style="padding:16px 4px">${tab === 'fav' ? 'যেকোনো ডিজাইনের ★ চাপলে এখানে জমা হবে।' : 'এই ক্যাটাগরিতে এখনো কিছু নেই।'}</p>`}`;
+    const list = S.assets.filter((a) => (tab === 'fav' ? favs[a.id] : query ? true : a.kind === tab) && (!query || ((a.name || '') + ' ' + (a.tags || '') + ' ' + a.kind).toLowerCase().includes(query.toLowerCase())));
+    p.innerHTML = `<input class="inp" id="aq" placeholder="🔍 নাম / tag দিয়ে সব ক্যাটাগরিতে খুঁজুন…" value="${esc(query)}" style="margin-bottom:10px">${list.length ? `<div class="agrid">${list.map((a) => `<div class="ai" draggable="true" data-id="${a.id}" title="${esc(a.name)}"><img loading="lazy" src="${esc(a.preview)}" alt=""><span class="an">${esc(a.name)}</span><span class="badge ${a.type}">${a.type === 'paid' ? '⚡' + a.price : 'FREE'}</span>${H.toggleFav ? `<button class="fv ${favs[a.id] ? 'on' : ''}" data-f="${a.id}" title="Favorite">★</button>` : ''}</div>`).join('')}</div>` : `<p class="mut small" style="padding:16px 4px">${tab === 'fav' ? 'যেকোনো ডিজাইনের ★ চাপলে এখানে জমা হবে।' : 'এই ক্যাটাগরিতে এখনো কিছু নেই।'}</p>`}`;
     const aq = q$('#aq'); aq.oninput = () => { query = aq.value; const pos = aq.selectionStart; panel(); const n = q$('#aq'); n.focus(); n.setSelectionRange(pos, pos); };
     qa('.ai', p).forEach((c) => {
       const a = assetOf(c.dataset.id);
@@ -824,7 +872,6 @@ export function mountStudio(root, skin, H, opts = {}) {
       gradStops(l).forEach((cl, i, arr) => g.addColorStop(i / (arr.length - 1), cl));
       x.fillStyle = g;
     } else x.fillStyle = l.fill;
-    if (l.shadow) { x.shadowColor = 'rgba(0,0,0,.7)'; x.shadowBlur = 0.03 * W; }
     x.fill(p, rule);
     x.shadowColor = 'transparent'; x.shadowBlur = 0;
     if (l.sw > 0) { x.lineJoin = 'round'; x.lineWidth = l.sw * w; x.strokeStyle = l.stroke; x.stroke(p); }
@@ -860,9 +907,14 @@ export function mountStudio(root, skin, H, opts = {}) {
         if (l.bm && l.bm !== 'normal') x.globalCompositeOperation = l.bm;
         x.translate(l.x * W, l.y * Hh);
         x.rotate(((l.rot || 0) * Math.PI) / 180);
+        if (l.shadow) {
+          const th = ((l.rot || 0) * Math.PI) / 180, ox = (l.shx || 0) * W * (l.flip ? -1 : 1), oy = (l.shy || 0) * W * (l.flv ? -1 : 1);
+          x.shadowOffsetX = ox * Math.cos(th) - oy * Math.sin(th); x.shadowOffsetY = ox * Math.sin(th) + oy * Math.cos(th);
+          x.shadowBlur = nnum(l.shb, 0.03) * W; x.shadowColor = rgbaOf(l.shc, 0.7);
+        }
         if (l.t === 'img') {
           const b0 = l.local ? lbm[l.id] : map[l.aid]; if (!b0) { x.restore(); continue; }
-          const b = filt(l) ? recolor(b0, l) : b0, w = l.w * W, h = w * (b0.height / b0.width) * sy;
+          const b1 = filt(l) ? recolor(b0, l) : b0, b = l.tint ? tintCv(b1, l) : b1, w = l.w * W, h = w * (b0.height / b0.width) * sy;
           x.scale(l.flip ? -1 : 1, l.flv ? -1 : 1);
           x.drawImage(b, -w / 2, -h / 2, w, h);
         } else if (l.t === 'shape') {
@@ -872,7 +924,7 @@ export function mountStudio(root, skin, H, opts = {}) {
           const fs = l.fs * W;
           x.scale(l.flip ? -1 : 1, sy * (l.flv ? -1 : 1));
           x.font = `800 ${fs}px "${l.font}", sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
-          if (l.strokeW > 0) { x.lineJoin = 'round'; x.lineWidth = fs * l.strokeW; x.strokeStyle = l.stroke; x.strokeText(l.text, 0, 0); }
+          if (l.strokeW > 0) { x.lineJoin = 'round'; x.lineWidth = fs * l.strokeW; x.strokeStyle = l.stroke; x.strokeText(l.text, 0, 0); x.shadowColor = 'transparent'; }
           if (l.grad) {
             const tw = x.measureText(l.text).width, th = fs * 1.1, a = ((l.ang ?? 45) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a), g = x.createLinearGradient(-(c * tw) / 2, -(sn * th) / 2, (c * tw) / 2, (sn * th) / 2);
             gradStops(l).forEach((cl, i, arr) => g.addColorStop(i / (arr.length - 1), cl));
@@ -903,6 +955,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       if (l.local) { localSkip++; return; }
       const base = { id: nid(), x: num(l.x, 0.5, -0.5, 1.5), y: num(l.y, 0.5, -0.5, 1.5), rot: num(l.rot, 0, -3600, 3600), flip: !!l.flip, op: num(l.op, 1, 0.05, 1), sy: num(l.sy, 1, 0.05, 8) };
       if (l.lock) base.lock = true;
+      if (l.shadow) Object.assign(base, { shadow: true, shc: col(l.shc, '#000000'), shb: num(l.shb, 0.03, 0, 0.1), shx: num(l.shx, 0, -0.1, 0.1), shy: num(l.shy, 0, -0.1, 0.1) });
       if (l.hid) base.hid = true;
       if (l.flv) base.flv = true;
       if (BLENDS.includes(l.bm) && l.bm !== 'normal') base.bm = l.bm;
@@ -910,7 +963,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       if (l.t === 'img') {
         const a = assetOf(String(l.aid));
         if (!a) { missing++; return; }
-        out.push({ ...base, t: 'img', aid: a.id, url: a.preview, name: a.name, w: num(l.w, 0.3, 0.03, 3), hue: num(l.hue, 0, -180, 180), sat: num(l.sat, 1, 0, 2), bri: num(l.bri, 1, 0.3, 1.7) });
+        out.push({ ...base, t: 'img', aid: a.id, url: a.preview, name: a.name, w: num(l.w, 0.3, 0.03, 3), hue: num(l.hue, 0, -180, 180), sat: num(l.sat, 1, 0, 2), bri: num(l.bri, 1, 0.3, 1.7), ...(l.tint ? { tint: true, tna: num(l.tna, 1, 0.1, 1), fill: col(l.fill, '#00e5ff') } : {}), ...(l.grad ? { grad: true, ang: num(l.ang, 45, 0, 360), fill2: col(l.fill2, '#8b5cf6'), g3: !!l.g3, fill3: col(l.fill3, '#ff2e93') } : {}) });
       } else if (l.t === 'text') {
         out.push({ ...base, t: 'text', text: String(l.text || '').slice(0, 60), font: String(l.font || fonts()[0]).slice(0, 60), color: col(l.color, '#ffffff'), stroke: col(l.stroke, '#000000'), strokeW: num(l.strokeW, 0.08, 0, 0.6), fs: num(l.fs, 0.08, 0.015, 0.6), ...(l.grad ? { grad: true, ang: num(l.ang, 45, 0, 360), fill2: col(l.fill2, '#8b5cf6'), g3: !!l.g3, fill3: col(l.fill3, '#ff2e93') } : {}) });
       } else if (l.t === 'shape') {
@@ -922,9 +975,9 @@ export function mountStudio(root, skin, H, opts = {}) {
     if (localSkip) toast(`${localSkip}টি নিজের ছবি ফাইলে থাকে না, তাই বাদ গেছে`, 'err');
     return out;
   }
-  const common = (l) => ({ x: l.x, y: l.y, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1, sy: l.sy || 1, ...(l.hid ? { hid: true } : {}), ...(l.lock ? { lock: true } : {}), ...(l.flv ? { flv: true } : {}), ...(l.bm && l.bm !== 'normal' ? { bm: l.bm } : {}), ...(l.gid ? { gid: l.gid } : {}) });
+  const common = (l) => ({ x: l.x, y: l.y, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1, sy: l.sy || 1, ...(l.hid ? { hid: true } : {}), ...(l.lock ? { lock: true } : {}), ...(l.flv ? { flv: true } : {}), ...(l.bm && l.bm !== 'normal' ? { bm: l.bm } : {}), ...(l.gid ? { gid: l.gid } : {}), ...(l.shadow ? { shadow: true, shc: l.shc || '#000000', shb: l.shb ?? 0.03, shx: l.shx || 0, shy: l.shy || 0 } : {}) });
   const clean = () => layers.filter((l) => !l.local).map((l) => (l.t === 'img'
-    ? { t: 'img', aid: l.aid, w: l.w, hue: l.hue || 0, sat: l.sat ?? 1, bri: l.bri ?? 1, ...common(l) }
+    ? { t: 'img', aid: l.aid, w: l.w, hue: l.hue || 0, sat: l.sat ?? 1, bri: l.bri ?? 1, ...(l.tint ? { tint: true, tna: l.tna ?? 1, fill: l.fill || '#00e5ff' } : {}), ...(l.grad ? { grad: true, ang: l.ang ?? 45, fill2: l.fill2 || '#8b5cf6', g3: !!l.g3, fill3: l.fill3 || '#ff2e93' } : {}), ...common(l) }
     : l.t === 'shape'
       ? { t: 'shape', k: l.k, ...(l.k === 'custom' ? { pts: l.pts, sm: !!l.sm } : {}), fill: l.fill, fill2: l.fill2, fill3: l.fill3 || '#ff2e93', g3: !!l.g3, grad: !!l.grad, ang: l.ang ?? 45, stroke: l.stroke, sw: l.sw || 0, rad: l.rad || 0, shadow: !!l.shadow, w: l.w, ...common(l) }
       : { t: 'text', text: l.text, font: l.font, color: l.color, stroke: l.stroke, strokeW: l.strokeW, fs: l.fs, ...(l.grad ? { grad: true, ang: l.ang ?? 45, fill2: l.fill2 || '#8b5cf6', g3: !!l.g3, fill3: l.fill3 || '#ff2e93' } : {}), ...common(l) }));
