@@ -287,3 +287,12 @@ footer{border-top:1px solid var(--line);margin-top:50px;padding:30px 0;color:var
   .st-tools .tb{flex:0 0 auto}
   .st-text{flex-direction:row}
 }
+
+/* ===== Studio v5 ===== */
+.stage2{isolation:isolate}
+.stp{flex-wrap:wrap;gap:5px!important}
+.stp .tb{height:30px;min-width:30px;padding:0 6px}
+.stp .sv{min-width:24px;text-align:center;font-family:var(--hf)}
+.lrow .lck{padding:2px 3px;font-size:14px}
+.lrow.base{opacity:.9;border-top:1px dashed var(--line);margin-top:6px}
+.lrow.base.hid{opacity:.45}

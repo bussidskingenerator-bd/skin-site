@@ -38,12 +38,14 @@ export function shapeD(l) {
   return PATHS[l.k];
 }
 const hexc = (v, d) => (/^#[0-9a-f]{3,8}$/i.test(String(v)) ? String(v) : d);
+export const BLENDS = ['normal', 'multiply', 'darken', 'lighten', 'overlay', 'screen', 'soft-light', 'hard-light', 'color-dodge', 'color-burn', 'difference', 'exclusion'];
+export const gradStops = (l) => [hexc(l.t === 'text' ? l.color : l.fill, '#00e5ff'), hexc(l.fill2, '#8b5cf6'), ...(l.g3 ? [hexc(l.fill3, '#ff2e93')] : [])];
 export function shapeSvg(l, swCss, gid = 'g') {
   const a = ((Number.isFinite(+l.ang) ? +l.ang : 45) * Math.PI) / 180, c = Math.cos(a) * 50, s = Math.sin(a) * 50;
-  const f1 = hexc(l.fill, '#00e5ff'), f2 = hexc(l.fill2, '#8b5cf6');
-  const grad = l.grad ? `<defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="${(50 - c).toFixed(2)}" y1="${(50 - s).toFixed(2)}" x2="${(50 + c).toFixed(2)}" y2="${(50 + s).toFixed(2)}"><stop offset="0" stop-color="${f1}"/><stop offset="1" stop-color="${f2}"/></linearGradient></defs>` : '';
-  const st = +l.sw > 0 ? ` stroke="${hexc(l.stroke, '#000000')}" stroke-linejoin="round" vector-effect="non-scaling-stroke" style="stroke-width:${swCss}"` : '';
-  return `<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:100%;display:block;overflow:visible">${grad}<path d="${shapeD(l)}" fill="${l.grad ? `url(#${gid})` : f1}" fill-rule="${l.k === 'ring' ? 'evenodd' : 'nonzero'}"${st}/></svg>`;
+  const f1 = hexc(l.fill, '#00e5ff'), st = gradStops(l);
+  const grad = l.grad ? `<defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="${(50 - c).toFixed(2)}" y1="${(50 - s).toFixed(2)}" x2="${(50 + c).toFixed(2)}" y2="${(50 + s).toFixed(2)}">${st.map((cl, i) => `<stop offset="${i / (st.length - 1)}" stop-color="${cl}"/>`).join('')}</linearGradient></defs>` : '';
+  const sk = +l.sw > 0 ? ` stroke="${hexc(l.stroke, '#000000')}" stroke-linejoin="round" vector-effect="non-scaling-stroke" style="stroke-width:${swCss}"` : '';
+  return `<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:100%;display:block;overflow:visible">${grad}<path d="${shapeD(l)}" fill="${l.grad ? `url(#${gid})` : f1}" fill-rule="${l.k === 'ring' ? 'evenodd' : 'nonzero'}"${sk}/></svg>`;
 }
 
 /* ---------- Template / design mini preview (user + admin দুই জায়গাতেই) ---------- */
@@ -52,19 +54,20 @@ export function miniLayersHtml(list, assetOf, esc) {
   const n = (v, d) => (Number.isFinite(+v) ? +v : d);
   return (list || []).map((l) => {
     if (!l || l.hid) return '';
-    const sy = n(l.sy, 1), fl = l.flip ? -1 : 1;
-    const pos = `left:${(n(l.x, 0.5) * 100).toFixed(2)}%;top:${(n(l.y, 0.5) * 100).toFixed(2)}%;opacity:${n(l.op, 1)}`;
+    const sy = n(l.sy, 1), fl = l.flip ? -1 : 1, fv = l.flv ? -1 : 1, bmx = l.bm && BLENDS.includes(l.bm) && l.bm !== 'normal' ? `;mix-blend-mode:${l.bm}` : '';
+    const pos = `left:${(n(l.x, 0.5) * 100).toFixed(2)}%;top:${(n(l.y, 0.5) * 100).toFixed(2)}%;opacity:${n(l.op, 1)}${bmx}`;
     const tr = `translate(-50%,-50%) rotate(${n(l.rot, 0)}deg)`;
     if (l.t === 'img') {
       const a = assetOf(l.aid);
-      return a ? `<div class="ml" style="${pos};transform:${tr};width:${(n(l.w, 0.3) * 100).toFixed(2)}%"><img src="${esc(a.preview)}" alt="" style="transform:scale(${fl},${sy});filter:${filt(l) || 'none'}"></div>` : '';
+      return a ? `<div class="ml" style="${pos};transform:${tr};width:${(n(l.w, 0.3) * 100).toFixed(2)}%"><img src="${esc(a.preview)}" alt="" style="transform:scale(${fl},${sy * fv});filter:${filt(l) || 'none'}"></div>` : '';
     }
     if (l.t === 'shape') {
       const w = n(l.w, 0.25);
-      return `<div class="ml" style="${pos};transform:${tr};width:${(w * 100).toFixed(2)}%;aspect-ratio:1/${sy}${l.shadow ? ';filter:drop-shadow(0 0 1.5cqw rgba(0,0,0,.7))' : ''}"><div style="width:100%;height:100%${fl < 0 ? ';transform:scaleX(-1)' : ''}">${shapeSvg(l, (n(l.sw, 0) * w * 100).toFixed(2) + 'cqw', 'mg' + ++miniSeq)}</div></div>`;
+      return `<div class="ml" style="${pos};transform:${tr};width:${(w * 100).toFixed(2)}%;aspect-ratio:1/${sy}${l.shadow ? ';filter:drop-shadow(0 0 1.5cqw rgba(0,0,0,.7))' : ''}"><div style="width:100%;height:100%${fl < 0 || fv < 0 ? `;transform:scale(${fl},${fv})` : ''}">${shapeSvg(l, (n(l.sw, 0) * w * 100).toFixed(2) + 'cqw', 'mg' + ++miniSeq)}</div></div>`;
     }
     const fs = (n(l.fs, 0.08) * 100).toFixed(2);
-    return `<div class="ml mtx" style="${pos};transform:${tr} scaleY(${sy});font-size:${fs}cqw;font-family:'${esc(l.font)}',sans-serif;color:${esc(hexc(l.color, '#fff'))};-webkit-text-stroke:${(n(l.strokeW, 0) * fs).toFixed(2)}cqw ${esc(hexc(l.stroke, '#000'))};paint-order:stroke fill"><span style="display:inline-block;${fl < 0 ? 'transform:scaleX(-1)' : ''}">${esc(l.text)}</span></div>`;
+    const tg = l.grad ? `;background:linear-gradient(${n(l.ang, 45) + 90}deg,${gradStops(l).join(',')});-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent` : '';
+    return `<div class="ml mtx" style="${pos};transform:${tr} scaleY(${sy * fv});font-size:${fs}cqw;font-family:'${esc(l.font)}',sans-serif;color:${esc(hexc(l.color, '#fff'))}${tg};-webkit-text-stroke:${(n(l.strokeW, 0) * fs).toFixed(2)}cqw ${esc(hexc(l.stroke, '#000'))};paint-order:stroke fill"><span style="display:inline-block;${fl < 0 ? 'transform:scaleX(-1)' : ''}">${esc(l.text)}</span></div>`;
   }).join('');
 }
 
@@ -88,15 +91,17 @@ function recolor(bmp, l) {
   return c;
 }
 const DEF_W = { banner: 0.6, shape: 0.25, name: 0.5, accessory: 0.3, sticker: 0.2, pattern: 1, logo: 0.2 };
-const DEF = { op: 1, sy: 1, hue: 0, sat: 1, bri: 1, ang: 45, sw: 0, rad: 0, grad: false, shadow: false, fill: '#00e5ff', fill2: '#8b5cf6', stroke: '#000000' };
+const DEF = { op: 1, sy: 1, hue: 0, sat: 1, bri: 1, ang: 45, sw: 0, rad: 0, grad: false, shadow: false, fill: '#00e5ff', fill2: '#8b5cf6', fill3: '#ff2e93', g3: false, stroke: '#000000', bm: 'normal' };
 // [selector, layer key, allowed types (null = সব), kind: n=number s=string b=bool]
 const BIND = [
-  ['#op', 'op', null, 'n'], ['#sy', 'sy', null, 'n'],
-  ['#tt', 'text', ['text'], 's'], ['#tf', 'font', ['text'], 's'], ['#tc', 'color', ['text'], 's'], ['#ts', 'stroke', ['text'], 's'], ['#tw', 'strokeW', ['text'], 'n'],
+  ['#op', 'op', null, 'n'], ['#sy', 'sy', null, 'n'], ['#bm', 'bm', null, 's'],
+  ['#tt', 'text', ['text'], 's'], ['#tf', 'font', ['text'], 's'], ['#tc', 'color', ['text'], 's'], ['#ts', 'stroke', ['text'], 's'], 
   ['#rh', 'hue', ['img'], 'n'], ['#rs', 'sat', ['img'], 'n'], ['#rb', 'bri', ['img'], 'n'],
-  ['#sf', 'fill', ['shape'], 's'], ['#sg', 'grad', ['shape'], 'b'], ['#sf2', 'fill2', ['shape'], 's'], ['#sa', 'ang', ['shape'], 'n'],
-  ['#ss', 'stroke', ['shape'], 's'], ['#sw', 'sw', ['shape'], 'n'], ['#sr', 'rad', ['shape'], 'n'], ['#sh', 'shadow', ['shape'], 'b'],
+  ['#sf', 'fill', ['shape'], 's'], ['#sg', 'grad', ['shape', 'text'], 'b'], ['#sf2', 'fill2', ['shape', 'text'], 's'], ['#sg3', 'g3', ['shape', 'text'], 'b'], ['#sf3', 'fill3', ['shape', 'text'], 's'], ['#sa', 'ang', ['shape', 'text'], 'n'],
+  ['#ss', 'stroke', ['shape'], 's'], ['#sh', 'shadow', ['shape'], 'b'],
 ];
+
+const stepper = (id, label) => `<span class="inl stp" id="${id}"><label class="mut small">${label}</label><button class="tb" data-s="-1">−</button><b class="sv">0</b><button class="tb" data-s="1">＋</button>${[0, 2, 4, 6, 8, 10, 15, 20].map((v) => `<button class="tb wide" data-v="${v}">${v}</button>`).join('')}</span>`;
 
 export function mountStudio(root, skin, H, opts = {}) {
   const { S, esc, toast, modal } = H;
@@ -107,7 +112,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   const key = 'studio:' + skin.id + (opts.template ? ':' + opts.template.id : '');
   let layers = [], sel = null, hist = [], fut = [], tab = 'banner', query = '', liveSnap = null, drag = null, snap0 = null;
   const pts = new Map(), vpts = new Map(), msel = new Set(), locals = new Map();
-  let vz = null;
+  let vz = null, baseHid = false;
   const Z = { z: 1, x: 0, y: 0 };
   let snapOn = true, tplId = opts.template ? opts.template.id : null;
   const guides = {};
@@ -131,23 +136,26 @@ export function mountStudio(root, skin, H, opts = {}) {
       <section class="st-main">
         <div class="card st-tools" id="tools"><button class="dclose" data-dc>✕</button>
           <button class="tb" data-act="undo" title="Undo (Ctrl+Z)">↶</button><button class="tb" data-act="redo" title="Redo">↷</button><i class="vsep"></i>
-          <button class="tb" data-act="dup" title="Duplicate">⧉</button><button class="tb" data-act="flip" title="Mirror / উল্টানো">⇋</button><button class="tb" data-act="up" title="Bring forward">⬆</button><button class="tb" data-act="down" title="Send back">⬇</button><button class="tb" data-act="del" title="Delete">🗑</button><i class="vsep"></i>
+          <button class="tb" data-act="dup" title="Duplicate">⧉</button><button class="tb" data-act="flip" title="বাম↔ডান উল্টানো (Mirror)">⇋</button><button class="tb" data-act="flipv" title="উপর↕নিচ উল্টানো">⇅</button><button class="tb" data-act="up" title="Bring forward">⬆</button><button class="tb" data-act="down" title="Send back">⬇</button><button class="tb" data-act="del" title="Delete">🗑</button><i class="vsep"></i>
           <label class="mut small">Opacity</label><input type="range" id="op" min="0.1" max="1" step="0.05" value="1" style="width:100px">
+          <label class="mut small">Blend</label><select class="inp" id="bm" style="width:auto;padding:6px 8px">${BLENDS.map((b) => `<option>${b}</option>`).join('')}</select>
           <label class="mut small" title="উপর-নিচে টানা / চাপা">↕ Stretch</label><input type="range" id="sy" min="0.2" max="4" step="0.05" value="1" style="width:100px"><button class="tb wide" id="syr" title="Stretch রিসেট">1×</button><i class="vsep"></i>
           <button class="tb wide on" data-act="snap" title="Snap / Guide লাইন">🧲 Snap</button><button class="tb wide" data-act="clear">Clear all</button><button class="tb wide" data-act="save" title="ডিজাইন ফাইল হিসেবে সেভ">💾 Save</button><button class="tb wide" data-act="open" title="সেভ করা ডিজাইন ফাইল খুলুন">📂 Open</button><input type="file" id="openF" accept=".json,application/json" class="hide">
           <div id="tctl" class="hide st-text">
             <input class="inp" id="tt" placeholder="লেখা…" maxlength="40">
             <select class="inp" id="tf"></select>
             <input class="inp" type="color" id="tc" title="Text color"><input class="inp" type="color" id="ts" title="Outline color">
-            <input type="range" id="tw" min="0" max="0.25" step="0.01" title="Outline" style="width:90px">
           </div>
           <div id="rctl" class="hide st-text"><b class="mut small">🎨 COLOR</b><label class="mut small">Hue</label><input type="range" id="rh" min="-180" max="180" step="1"><label class="mut small">Saturation</label><input type="range" id="rs" min="0" max="2" step="0.05"><label class="mut small">Brightness</label><input type="range" id="rb" min="0.3" max="1.7" step="0.05"><button class="tb wide" id="rr">Reset</button></div>
+          <div id="bctl" class="hide st-text">${stepper('bdc', 'Border')}</div>
+          <div id="gctl" class="hide st-text"><b class="mut small">🌈 GRADIENT</b>
+            <label class="chk mut small"><input type="checkbox" id="sg"> On</label>
+            <span id="sgw" class="inl hide"><input class="inp" type="color" id="sf2" title="Color 2"><label class="chk mut small"><input type="checkbox" id="sg3"> +Color</label><input class="inp hide" type="color" id="sf3" title="Color 3"><label class="mut small">Angle</label><input type="range" id="sa" min="0" max="360" step="5"></span>
+          </div>
           <div id="shctl" class="hide st-text"><b class="mut small">◆ SHAPE</b>
             <span class="inl"><label class="mut small">Color</label><input class="inp" type="color" id="sf"></span>
-            <label class="chk mut small"><input type="checkbox" id="sg"> Gradient</label>
-            <span id="sgw" class="inl hide"><input class="inp" type="color" id="sf2" title="Color 2"><label class="mut small">Angle</label><input type="range" id="sa" min="0" max="360" step="5"></span>
-            <span class="inl"><label class="mut small">Outline</label><input class="inp" type="color" id="ss"><input type="range" id="sw" min="0" max="0.15" step="0.005"></span>
-            <span id="srw" class="inl"><label class="mut small">Corner</label><input type="range" id="sr" min="0" max="0.5" step="0.01"></span>
+            <span class="inl"><label class="mut small">Border color</label><input class="inp" type="color" id="ss"></span>
+            <span id="srw" class="inl hide">${stepper('rdc', 'Corner')}</span>
             <label class="chk mut small"><input type="checkbox" id="sh"> Shadow</label>
           </div>
         </div>
@@ -192,25 +200,27 @@ export function mountStudio(root, skin, H, opts = {}) {
   /* ---------- stage render ---------- */
   const elOf = (id) => stg.querySelector(`.ly[data-id="${id}"]`);
   function place(el, l) {
-    const W = stg.clientWidth || 600, sy = l.sy || 1, fl = l.flip ? -1 : 1, c = cur();
-    Object.assign(el.style, { display: l.hid ? 'none' : '', left: l.x * 100 + '%', top: l.y * 100 + '%', transform: `translate(-50%,-50%) rotate(${l.rot || 0}deg)`, opacity: l.op ?? 1 });
+    const W = stg.clientWidth || 600, sy = l.sy || 1, fl = l.flip ? -1 : 1, fv = l.flv ? -1 : 1, c = cur();
+    Object.assign(el.style, { mixBlendMode: l.bm && l.bm !== 'normal' ? l.bm : '', display: l.hid ? 'none' : '', left: l.x * 100 + '%', top: l.y * 100 + '%', transform: `translate(-50%,-50%) rotate(${l.rot || 0}deg)`, opacity: l.op ?? 1 });
     const inn = el.firstChild;
     el.classList.toggle('tl', l.t === 'text');
     if (l.t === 'text') {
       el.classList.remove('fx'); el.style.width = 'auto'; el.style.aspectRatio = '';
       const fs = l.fs * W;
       el.style.height = fs * 1.1 * sy + 'px';
-      Object.assign(inn.style, { fontSize: fs + 'px', fontFamily: `"${l.font}",sans-serif`, color: l.color, fontWeight: 800, webkitTextStroke: l.strokeW > 0 ? l.strokeW * fs + 'px ' + l.stroke : '0', paintOrder: 'stroke fill', transform: `scale(${fl},${sy})` });
+      Object.assign(inn.style, { fontSize: fs + 'px', fontFamily: `"${l.font}",sans-serif`, color: l.color, fontWeight: 800, webkitTextStroke: l.strokeW > 0 ? l.strokeW * fs + 'px ' + l.stroke : '0', paintOrder: 'stroke fill', transform: `scale(${fl},${sy * fv})` });
+      if (l.grad) Object.assign(inn.style, { background: `linear-gradient(${(l.ang ?? 45) + 90}deg,${gradStops(l).join(',')})`, webkitBackgroundClip: 'text', backgroundClip: 'text', webkitTextFillColor: 'transparent' });
+      else Object.assign(inn.style, { background: '', webkitBackgroundClip: '', backgroundClip: '', webkitTextFillColor: '' });
       inn.textContent = l.text;
     } else if (l.t === 'shape') {
       el.classList.add('fx'); el.style.width = l.w * 100 + '%'; el.style.height = ''; el.style.aspectRatio = '1 / ' + sy;
-      inn.style.transform = fl < 0 ? 'scaleX(-1)' : '';
+      inn.style.transform = fl < 0 || fv < 0 ? `scale(${fl},${fv})` : '';
       inn.style.filter = l.shadow ? `drop-shadow(0 0 ${0.03 * W}px rgba(0,0,0,.7))` : '';
       inn.innerHTML = shapeSvg(l, (l.sw || 0) * l.w * W + 'px', 'g' + l.id);
     } else {
       el.style.width = l.w * 100 + '%'; el.style.height = '';
       if (l.nar) { el.classList.add('fx'); el.style.aspectRatio = '1 / ' + l.nar * sy; } else { el.classList.remove('fx'); el.style.aspectRatio = ''; }
-      inn.style.transform = fl < 0 ? 'scaleX(-1)' : ''; inn.style.filter = filt(l);
+      inn.style.transform = fl < 0 || fv < 0 ? `scale(${fl},${fv})` : ''; inn.style.filter = filt(l);
     }
     el.classList.toggle('sel', l.id === sel);
     el.classList.toggle('gm', !!l.gid && !!c && c.gid === l.gid && l.id !== sel);
@@ -270,15 +280,23 @@ export function mountStudio(root, skin, H, opts = {}) {
     afterAdd(true);
     setTimeout(() => { const t = q$('#tt'); t && t.focus(); t && t.select(); }, 80);
   }
-  function dupLayer(l) {
-    const g = l.gid ? gidn() : undefined, ids = {};
-    members(l).forEach((m) => {
+  function dupMany(arr) {
+    const gm = {}, ids = {};
+    arr.forEach((m) => {
       const c = { ...m, id: nid(), x: clamp(m.x + 0.04, 0, 1), y: clamp(m.y + 0.04, 0, 1) };
-      if (g) c.gid = g; else delete c.gid;
+      if (m.gid) { gm[m.gid] = gm[m.gid] || gidn(); c.gid = gm[m.gid]; } else delete c.gid;
       if (m.local && locals.has(m.id)) locals.set(c.id, locals.get(m.id));
       layers.push(c); ids[m.id] = c.id;
     });
-    sel = ids[l.id];
+    return ids;
+  }
+  function dupLayer(l) { const ids = dupMany(members(l)); sel = ids[l.id]; }
+  function copyTicked() {
+    const ids = new Set([...msel].filter((id) => layers.some((l) => l.id === id)));
+    if (!ids.size) return toast('Layer টিক দিন', 'err');
+    layers.forEach((l) => { if (ids.has(l.id) && l.gid) layers.forEach((m) => m.gid === l.gid && ids.add(m.id)); });
+    mutate(() => { const arr = layers.filter((l) => ids.has(l.id)), m = dupMany(arr); sel = m[arr[arr.length - 1].id]; msel.clear(); });
+    toast('Copy হয়েছে ⧉');
   }
   function act(a) {
     const l = cur();
@@ -292,6 +310,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     if (a === 'del') mutate(() => { layers = layers.filter((x) => x.id !== l.id); sel = null; });
     if (a === 'dup') mutate(() => dupLayer(l));
     if (a === 'flip') mutate(() => { l.flip = !l.flip; });
+    if (a === 'flipv') mutate(() => { l.flv = !l.flv; });
     if (a === 'up') mutate(() => { const i = layers.indexOf(l); if (i < layers.length - 1) [layers[i], layers[i + 1]] = [layers[i + 1], layers[i]]; });
     if (a === 'down') mutate(() => { const i = layers.indexOf(l); if (i > 0) [layers[i], layers[i - 1]] = [layers[i - 1], layers[i]]; });
   }
@@ -306,6 +325,16 @@ export function mountStudio(root, skin, H, opts = {}) {
       el.onchange = () => { if (k === 'font') H.ensureFont(el.value); endLive(); };
     }
   });
+  const STEP = {
+    bdc: { get: (l) => Math.round((l.t === 'shape' ? (l.sw || 0) * l.w : (l.strokeW || 0) * l.fs) * 1000), set: (l, v) => { v = clamp(v, 0, 40); if (l.t === 'shape') l.sw = v / 1000 / l.w; else l.strokeW = clamp(v / 1000 / l.fs, 0, 0.6); } },
+    rdc: { get: (l) => Math.round((l.rad || 0) * 100), set: (l, v) => { l.rad = clamp(v, 0, 50) / 100; } },
+  };
+  Object.entries(STEP).forEach(([id, st]) => {
+    qa('#' + id + ' button').forEach((b) => (b.onclick = () => {
+      const l = cur(); if (!l) return;
+      mutate(() => st.set(l, b.dataset.v !== undefined ? +b.dataset.v : st.get(l) + +b.dataset.s));
+    }));
+  });
   q$('#syr').onclick = () => { const l = cur(); if (l) mutate(() => { l.sy = 1; }); };
   q$('#rr').onclick = () => { const l = cur(); if (l && l.t === 'img') mutate(() => { l.hue = 0; l.sat = 1; l.bri = 1; }); };
   function tools() {
@@ -313,13 +342,18 @@ export function mountStudio(root, skin, H, opts = {}) {
     q$('#tctl').classList.toggle('hide', t !== 'text');
     q$('#rctl').classList.toggle('hide', t !== 'img');
     q$('#shctl').classList.toggle('hide', t !== 'shape');
+    q$('#gctl').classList.toggle('hide', !(t === 'shape' || t === 'text'));
+    q$('#bctl').classList.toggle('hide', !(t === 'shape' || t === 'text'));
     if (l) {
       BIND.forEach(([id, k, types, kind]) => {
         if (types && !types.includes(l.t)) return;
         const el = q$(id), v = l[k] ?? DEF[k] ?? '';
         if (kind === 'b') el.checked = !!v; else if (document.activeElement !== el) el.value = v;
       });
-      q$('#sgw').classList.toggle('hide', !(t === 'shape' && l.grad));
+      q$('#sgw').classList.toggle('hide', !((t === 'shape' || t === 'text') && l.grad));
+      q$('#sf3').classList.toggle('hide', !l.g3);
+      if (t === 'shape' || t === 'text') q$('#bdc .sv').textContent = STEP.bdc.get(l);
+      if (t === 'shape' && l.k === 'rect') q$('#rdc .sv').textContent = STEP.rdc.get(l);
       q$('#srw').classList.toggle('hide', !(t === 'shape' && l.k === 'rect'));
     } else { q$('#op').value = 1; q$('#sy').value = 1; }
     qa('[data-act="undo"]')[0].disabled = !hist.length;
@@ -500,10 +534,16 @@ export function mountStudio(root, skin, H, opts = {}) {
       return;
     }
     if (tab === 'layers') {
-      const act2 = `<div class="lact"><button class="btn sm" id="gM">🔗 Merge</button><button class="btn ghost sm" id="gS">Ungroup</button><button class="btn danger sm" id="gD">🗑 Delete ticked</button></div><p class="mut small" style="margin:6px 0 10px">২+ layer টিক দিয়ে <b>Merge</b> চাপলে সেগুলো একসাথে সরবে, বড়-ছোট হবে ও ঘুরবে। 👁 দিয়ে hide/show।</p>`;
-      p.innerHTML = act2 + (layers.length ? [...layers].reverse().map((l) => `<div class="lrow ${l.id === sel ? 'on' : ''} ${l.hid ? 'hid' : ''}" data-id="${l.id}"><input type="checkbox" class="chk" data-m ${msel.has(l.id) ? 'checked' : ''}><span class="lth">${l.t === 'img' ? `<img src="${esc(l.url)}" alt="">` : l.t === 'shape' ? shapeSvg({ ...l, sw: 0 }, '0', 'lt' + l.id) : 'T'}</span><span class="lnm">${esc(l.t === 'text' ? l.text : l.t === 'shape' ? (SHAPES.find((s) => s[0] === l.k) || [0, 'Shape'])[1] : l.name)}</span>${l.gid ? `<i class="gtag" style="background:${gcol(l.gid)}" title="Group"></i>` : ''}<button class="lck" data-h title="Hide / Show">${l.hid ? '🚫' : '👁'}</button><button class="lck" data-x title="Delete">🗑</button></div>`).join('') : '<p class="mut small">কোনো layer নেই। ডিজাইন, Shape বা Text যোগ করুন।</p>');
-      q$('#gM', p).onclick = mergeSel; q$('#gS', p).onclick = splitSel; q$('#gD', p).onclick = delSel;
-      qa('.lrow', p).forEach((r) => {
+      const act2 = `<div class="lact"><button class="btn sm" id="gM">🔗 Merge</button><button class="btn ghost sm" id="gS">Ungroup</button><button class="btn ghost sm" id="gC">⧉ Copy</button><button class="btn danger sm" id="gD">🗑 Delete</button></div><p class="mut small" style="margin:6px 0 10px">২+ layer টিক দিয়ে <b>Merge</b> চাপলে সেগুলো একসাথে সরবে, বড়-ছোট হবে ও ঘুরবে। 👁 দিয়ে hide/show।</p>`;
+      p.innerHTML = act2 + (layers.length ? [...layers].reverse().map((l) => `<div class="lrow ${l.id === sel ? 'on' : ''} ${l.hid ? 'hid' : ''}" data-id="${l.id}"><input type="checkbox" class="chk" data-m ${msel.has(l.id) ? 'checked' : ''}><span class="lth">${l.t === 'img' ? `<img src="${esc(l.url)}" alt="">` : l.t === 'shape' ? shapeSvg({ ...l, sw: 0 }, '0', 'lt' + l.id) : 'T'}</span><span class="lnm">${esc(l.t === 'text' ? l.text : l.t === 'shape' ? (SHAPES.find((s) => s[0] === l.k) || [0, 'Shape'])[1] : l.name)}</span>${l.gid ? `<i class="gtag" style="background:${gcol(l.gid)}" title="Group"></i>` : ''}<button class="lck" data-u title="উপরে আনুন">▲</button><button class="lck" data-dn title="নিচে নামান">▼</button><button class="lck" data-h title="Hide / Show">${l.hid ? '🚫' : '👁'}</button><button class="lck" data-x title="Delete">🗑</button></div>`).join('') : '<p class="mut small">কোনো layer নেই। ডিজাইন, Shape বা Text যোগ করুন।</p>') + `<div class="lrow base ${baseHid ? 'hid' : ''}"><span class="lth"><img src="${esc(skin.preview)}" alt=""></span><span class="lnm">${opts.own ? 'Imported skin (base)' : 'Base skin'}</span><button class="lck" data-bh title="Hide / Show">${baseHid ? '🚫' : '👁'}</button></div>`;
+      q$('#gM', p).onclick = mergeSel; q$('#gS', p).onclick = splitSel; q$('#gD', p).onclick = delSel; q$('#gC', p).onclick = copyTicked;
+      q$('[data-bh]', p).onclick = () => { baseHid = !baseHid; base.style.visibility = baseHid ? 'hidden' : ''; panel(); };
+      qa('.lrow[data-id]', p).forEach((r) => {
+        const mv = (d) => mutate(() => { const i = layers.findIndex((x) => x.id === r.dataset.id), j = i + d; if (i >= 0 && j >= 0 && j < layers.length) [layers[i], layers[j]] = [layers[j], layers[i]]; });
+        r.querySelector('[data-u]').onclick = (e) => { e.stopPropagation(); mv(1); };
+        r.querySelector('[data-dn]').onclick = (e) => { e.stopPropagation(); mv(-1); };
+      });
+      qa('.lrow[data-id]', p).forEach((r) => {
         const id = r.dataset.id;
         r.onclick = () => { sel = id; refreshSel(); };
         r.querySelector('[data-m]').onclick = (e) => { e.stopPropagation(); e.target.checked ? msel.add(id) : msel.delete(id); };
@@ -578,7 +618,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     if (l.grad) {
       const a = ((l.ang ?? 45) * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
       const g = x.createLinearGradient(w / 2 - (c * w) / 2, h / 2 - (s * h) / 2, w / 2 + (c * w) / 2, h / 2 + (s * h) / 2);
-      g.addColorStop(0, l.fill); g.addColorStop(1, l.fill2);
+      gradStops(l).forEach((cl, i, arr) => g.addColorStop(i / (arr.length - 1), cl));
       x.fillStyle = g;
     } else x.fillStyle = l.fill;
     if (l.shadow) { x.shadowColor = 'rgba(0,0,0,.7)'; x.shadowBlur = 0.03 * W; }
@@ -606,28 +646,34 @@ export function mountStudio(root, skin, H, opts = {}) {
       const W = baseBmp.width, Hh = baseBmp.height;
       const cv = document.createElement('canvas'); cv.width = W; cv.height = Hh;
       const x = cv.getContext('2d');
-      x.drawImage(baseBmp, 0, 0);
+      if (!baseHid) x.drawImage(baseBmp, 0, 0);
       await Promise.all(vis.filter((l) => l.t === 'text').map((l) => H.ensureFont(l.font)));
       for (const l of vis) {
         const sy = l.sy || 1;
         x.save();
         x.globalAlpha = l.op ?? 1;
+        if (l.bm && l.bm !== 'normal') x.globalCompositeOperation = l.bm;
         x.translate(l.x * W, l.y * Hh);
         x.rotate(((l.rot || 0) * Math.PI) / 180);
         if (l.t === 'img') {
           const b0 = l.local ? lbm[l.id] : map[l.aid]; if (!b0) { x.restore(); continue; }
           const b = filt(l) ? recolor(b0, l) : b0, w = l.w * W, h = w * (b0.height / b0.width) * sy;
-          if (l.flip) x.scale(-1, 1);
+          x.scale(l.flip ? -1 : 1, l.flv ? -1 : 1);
           x.drawImage(b, -w / 2, -h / 2, w, h);
         } else if (l.t === 'shape') {
-          if (l.flip) x.scale(-1, 1);
+          x.scale(l.flip ? -1 : 1, l.flv ? -1 : 1);
           drawShape(x, l, W);
         } else {
           const fs = l.fs * W;
-          x.scale(l.flip ? -1 : 1, sy);
+          x.scale(l.flip ? -1 : 1, sy * (l.flv ? -1 : 1));
           x.font = `800 ${fs}px "${l.font}", sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
           if (l.strokeW > 0) { x.lineJoin = 'round'; x.lineWidth = fs * l.strokeW; x.strokeStyle = l.stroke; x.strokeText(l.text, 0, 0); }
-          x.fillStyle = l.color; x.fillText(l.text, 0, 0);
+          if (l.grad) {
+            const tw = x.measureText(l.text).width, th = fs * 1.1, a = ((l.ang ?? 45) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a), g = x.createLinearGradient(-(c * tw) / 2, -(sn * th) / 2, (c * tw) / 2, (sn * th) / 2);
+            gradStops(l).forEach((cl, i, arr) => g.addColorStop(i / (arr.length - 1), cl));
+            x.fillStyle = g;
+          } else x.fillStyle = l.color;
+          x.fillText(l.text, 0, 0);
         }
         x.restore();
       }
@@ -652,27 +698,29 @@ export function mountStudio(root, skin, H, opts = {}) {
       if (l.local) { localSkip++; return; }
       const base = { id: nid(), x: num(l.x, 0.5, -0.5, 1.5), y: num(l.y, 0.5, -0.5, 1.5), rot: num(l.rot, 0, -3600, 3600), flip: !!l.flip, op: num(l.op, 1, 0.05, 1), sy: num(l.sy, 1, 0.2, 4) };
       if (l.hid) base.hid = true;
+      if (l.flv) base.flv = true;
+      if (BLENDS.includes(l.bm) && l.bm !== 'normal') base.bm = l.bm;
       if (l.gid) base.gid = String(l.gid).replace(/[^\w-]/g, '').slice(0, 24);
       if (l.t === 'img') {
         const a = assetOf(String(l.aid));
         if (!a) { missing++; return; }
         out.push({ ...base, t: 'img', aid: a.id, url: a.preview, name: a.name, w: num(l.w, 0.3, 0.03, 3), hue: num(l.hue, 0, -180, 180), sat: num(l.sat, 1, 0, 2), bri: num(l.bri, 1, 0.3, 1.7) });
       } else if (l.t === 'text') {
-        out.push({ ...base, t: 'text', text: String(l.text || '').slice(0, 60), font: String(l.font || fonts()[0]).slice(0, 60), color: col(l.color, '#ffffff'), stroke: col(l.stroke, '#000000'), strokeW: num(l.strokeW, 0.08, 0, 0.25), fs: num(l.fs, 0.08, 0.015, 0.6) });
+        out.push({ ...base, t: 'text', text: String(l.text || '').slice(0, 60), font: String(l.font || fonts()[0]).slice(0, 60), color: col(l.color, '#ffffff'), stroke: col(l.stroke, '#000000'), strokeW: num(l.strokeW, 0.08, 0, 0.6), fs: num(l.fs, 0.08, 0.015, 0.6), ...(l.grad ? { grad: true, ang: num(l.ang, 45, 0, 360), fill2: col(l.fill2, '#8b5cf6'), g3: !!l.g3, fill3: col(l.fill3, '#ff2e93') } : {}) });
       } else if (l.t === 'shape') {
-        out.push({ ...base, t: 'shape', k: SHAPES.some((s) => s[0] === l.k) ? l.k : 'rect', fill: col(l.fill, '#00e5ff'), fill2: col(l.fill2, '#8b5cf6'), grad: !!l.grad, ang: num(l.ang, 45, 0, 360), stroke: col(l.stroke, '#000000'), sw: num(l.sw, 0, 0, 0.15), rad: num(l.rad, 0, 0, 0.5), shadow: !!l.shadow, w: num(l.w, 0.25, 0.03, 3) });
+        out.push({ ...base, t: 'shape', k: SHAPES.some((s) => s[0] === l.k) ? l.k : 'rect', fill: col(l.fill, '#00e5ff'), fill2: col(l.fill2, '#8b5cf6'), fill3: col(l.fill3, '#ff2e93'), g3: !!l.g3, grad: !!l.grad, ang: num(l.ang, 45, 0, 360), stroke: col(l.stroke, '#000000'), sw: num(l.sw, 0, 0, 1), rad: num(l.rad, 0, 0, 0.5), shadow: !!l.shadow, w: num(l.w, 0.25, 0.03, 3) });
       }
     });
     if (missing) toast(`${missing}টি ডিজাইন আর নেই, সেগুলো বাদ দেওয়া হয়েছে`, 'err');
     if (localSkip) toast(`${localSkip}টি নিজের ছবি ফাইলে থাকে না, তাই বাদ গেছে`, 'err');
     return out;
   }
-  const common = (l) => ({ x: l.x, y: l.y, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1, sy: l.sy || 1, ...(l.hid ? { hid: true } : {}), ...(l.gid ? { gid: l.gid } : {}) });
+  const common = (l) => ({ x: l.x, y: l.y, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1, sy: l.sy || 1, ...(l.hid ? { hid: true } : {}), ...(l.flv ? { flv: true } : {}), ...(l.bm && l.bm !== 'normal' ? { bm: l.bm } : {}), ...(l.gid ? { gid: l.gid } : {}) });
   const clean = () => layers.filter((l) => !l.local).map((l) => (l.t === 'img'
     ? { t: 'img', aid: l.aid, w: l.w, hue: l.hue || 0, sat: l.sat ?? 1, bri: l.bri ?? 1, ...common(l) }
     : l.t === 'shape'
-      ? { t: 'shape', k: l.k, fill: l.fill, fill2: l.fill2, grad: !!l.grad, ang: l.ang ?? 45, stroke: l.stroke, sw: l.sw || 0, rad: l.rad || 0, shadow: !!l.shadow, w: l.w, ...common(l) }
-      : { t: 'text', text: l.text, font: l.font, color: l.color, stroke: l.stroke, strokeW: l.strokeW, fs: l.fs, ...common(l) }));
+      ? { t: 'shape', k: l.k, fill: l.fill, fill2: l.fill2, fill3: l.fill3 || '#ff2e93', g3: !!l.g3, grad: !!l.grad, ang: l.ang ?? 45, stroke: l.stroke, sw: l.sw || 0, rad: l.rad || 0, shadow: !!l.shadow, w: l.w, ...common(l) }
+      : { t: 'text', text: l.text, font: l.font, color: l.color, stroke: l.stroke, strokeW: l.strokeW, fs: l.fs, ...(l.grad ? { grad: true, ang: l.ang ?? 45, fill2: l.fill2 || '#8b5cf6', g3: !!l.g3, fill3: l.fill3 || '#ff2e93' } : {}), ...common(l) }));
   function saveFile() {
     if (layers.some((l) => l.local)) toast('নিজের ছবিগুলো ফাইলে সেভ হবে না (শুধু Export এ আসে)', 'err');
     const blob = new Blob([JSON.stringify({ app: 'bussid-studio', v: 2, skinId: skin.id, tpl: tplId, layers: clean() })], { type: 'application/json' });
