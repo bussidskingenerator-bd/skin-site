@@ -30,7 +30,28 @@ const PATHS = {
   para: 'M25,0H100L75,100H0Z', trap: 'M20,0H80L100,100H0Z', bolt: 'M60,0L12,56H44L34,100L88,38H56Z',
   moon: 'M62,2A48,48 0 1 0 98,72A40,40 0 0 1 62,2Z',
 };
+const ptsPath = (pts, sm) => {
+  const P = (pts || []).map((p) => [+p[0], +p[1]]).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1])), n = P.length, f = (v) => v.toFixed(2);
+  if (n < 3) return 'M0,0H100V100H0Z';
+  if (!sm) return 'M' + P.map((p) => f(p[0]) + ',' + f(p[1])).join('L') + 'Z';
+  let d = `M${f(P[0][0])},${f(P[0][1])}`;
+  for (let i = 0; i < n; i++) {
+    const a = P[(i - 1 + n) % n], b = P[i], c = P[(i + 1) % n], e = P[(i + 2) % n];
+    d += `C${f(b[0] + (c[0] - a[0]) / 6)},${f(b[1] + (c[1] - a[1]) / 6)} ${f(c[0] - (e[0] - b[0]) / 6)},${f(c[1] - (e[1] - b[1]) / 6)} ${f(c[0])},${f(c[1])}`;
+  }
+  return d + 'Z';
+};
+// shape এর বাইরের রেখা বরাবর সমান দূরত্বে n টি বিন্দু (point editing এর জন্য)
+export function outlinePts(d, n) {
+  const NS = 'http://www.w3.org/2000/svg', sv = document.createElementNS(NS, 'svg'), pa = document.createElementNS(NS, 'path');
+  sv.setAttribute('style', 'position:absolute;width:0;height:0;visibility:hidden'); pa.setAttribute('d', d); sv.appendChild(pa); document.body.appendChild(sv);
+  const L = pa.getTotalLength(), out = [];
+  for (let i = 0; i < n; i++) { const pt = pa.getPointAtLength((L * i) / n); out.push([+pt.x.toFixed(2), +pt.y.toFixed(2)]); }
+  sv.remove();
+  return out;
+}
 export function shapeD(l) {
+  if (l.k === 'custom' && Array.isArray(l.pts)) return ptsPath(l.pts, !!l.sm);
   if (l.k === 'rect' || !PATHS[l.k]) {
     const r = Math.min(0.5, Math.max(0, +l.rad || 0)) * 100;
     return r < 0.1 ? 'M0,0H100V100H0Z' : `M${r},0H${100 - r}A${r},${r} 0 0 1 100,${r}V${100 - r}A${r},${r} 0 0 1 ${100 - r},100H${r}A${r},${r} 0 0 1 0,${100 - r}V${r}A${r},${r} 0 0 1 ${r},0Z`;
@@ -98,10 +119,10 @@ const BIND = [
   ['#tt', 'text', ['text'], 's'], ['#tf', 'font', ['text'], 's'], ['#tc', 'color', ['text'], 's'], ['#ts', 'stroke', ['text'], 's'], 
   ['#rh', 'hue', ['img'], 'n'], ['#rs', 'sat', ['img'], 'n'], ['#rb', 'bri', ['img'], 'n'],
   ['#sf', 'fill', ['shape'], 's'], ['#sg', 'grad', ['shape', 'text'], 'b'], ['#sf2', 'fill2', ['shape', 'text'], 's'], ['#sg3', 'g3', ['shape', 'text'], 'b'], ['#sf3', 'fill3', ['shape', 'text'], 's'], ['#sa', 'ang', ['shape', 'text'], 'n'],
-  ['#ss', 'stroke', ['shape'], 's'], ['#sh', 'shadow', ['shape'], 'b'],
+  ['#ss', 'stroke', ['shape'], 's'], ['#sh', 'shadow', ['shape'], 'b'], ['#ptS', 'sm', ['shape'], 'b'],
 ];
 
-const stepper = (id, label) => `<span class="inl stp" id="${id}"><label class="mut small">${label}</label><button class="tb" data-s="-1">−</button><b class="sv">0</b><button class="tb" data-s="1">＋</button>${[0, 2, 4, 6, 8, 10, 15, 20].map((v) => `<button class="tb wide" data-v="${v}">${v}</button>`).join('')}</span>`;
+const stepper = (id, label, presets = [0, 2, 4, 6, 8, 10, 15, 20]) => `<span class="inl stp" id="${id}"><label class="mut small">${label}</label><button class="tb" data-s="-1">−</button><b class="sv">0</b><button class="tb" data-s="1">＋</button>${presets.map((v) => `<button class="tb wide" data-v="${v}">${v}</button>`).join('')}</span>`;
 
 export function mountStudio(root, skin, H, opts = {}) {
   const { S, esc, toast, modal } = H;
@@ -112,7 +133,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   const key = 'studio:' + skin.id + (opts.template ? ':' + opts.template.id : '');
   let layers = [], sel = null, hist = [], fut = [], tab = 'banner', query = '', liveSnap = null, drag = null, snap0 = null;
   const pts = new Map(), vpts = new Map(), msel = new Set(), locals = new Map();
-  let vz = null, baseHid = false;
+  let vz = null, baseHid = false, editPts = false, selNode = -1, lastSel = null;
   const Z = { z: 1, x: 0, y: 0 };
   let snapOn = true, tplId = opts.template ? opts.template.id : null;
   const guides = {};
@@ -157,6 +178,10 @@ export function mountStudio(root, skin, H, opts = {}) {
             <span class="inl"><label class="mut small">Border color</label><input class="inp" type="color" id="ss"></span>
             <span id="srw" class="inl hide">${stepper('rdc', 'Corner')}</span>
             <label class="chk mut small"><input type="checkbox" id="sh"> Shadow</label>
+            <b class="mut small" style="width:100%">✎ POINTS (বিন্দু টেনে নিজের মতো shape)</b>
+            <button class="tb wide" id="ptE">✎ Edit points</button>
+            ${stepper('ptn', 'Points', [3, 4, 6, 8, 10, 12, 15, 20])}
+            <span id="ptw" class="inl hide"><label class="chk mut small"><input type="checkbox" id="ptS"> Smooth</label><button class="tb wide" id="ptA">＋ Point</button><button class="tb wide" id="ptD">− Point</button></span>
           </div>
         </div>
         <div class="card" style="padding:12px"><div class="vp" id="vp"><div class="stage2" id="stg"><img id="base" alt=""></div><div class="zbar"><button class="tb" id="zout" title="Zoom out">−</button><button class="tb wide" id="zfit" title="Fit">100%</button><button class="tb" id="zin" title="Zoom in">＋</button></div></div><p class="c mut small" style="margin-top:8px">টেনে সরান · কোণার ডট দিয়ে বড়-ছোট · লাল ডট দিয়ে ঘোরান · ＋/− বা দুই আঙুলে zoom · zoom করে ফাঁকা জায়গা টেনে সরান</p></div>
@@ -222,6 +247,16 @@ export function mountStudio(root, skin, H, opts = {}) {
       if (l.nar) { el.classList.add('fx'); el.style.aspectRatio = '1 / ' + l.nar * sy; } else { el.classList.remove('fx'); el.style.aspectRatio = ''; }
       inn.style.transform = fl < 0 || fv < 0 ? `scale(${fl},${fv})` : ''; inn.style.filter = filt(l);
     }
+    qa('.nd', el).forEach((n) => n.remove());
+    if (l.t === 'shape' && l.k === 'custom' && editPts && l.id === sel && Array.isArray(l.pts)) {
+      l.pts.forEach((pt, i) => {
+        const n = document.createElement('i');
+        n.className = 'nd' + (i === selNode ? ' on' : '');
+        n.style.left = (fl < 0 ? 100 - pt[0] : pt[0]) + '%'; n.style.top = (fv < 0 ? 100 - pt[1] : pt[1]) + '%';
+        n.onpointerdown = (e) => down(e, l.id, 'node', i);
+        el.appendChild(n);
+      });
+    }
     el.classList.toggle('sel', l.id === sel);
     el.classList.toggle('gm', !!l.gid && !!c && c.gid === l.gid && l.id !== sel);
     el.style.setProperty('--gc', l.gid ? gcol(l.gid) : 'transparent');
@@ -244,7 +279,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       place(el, l);
     });
   }
-  function refreshSel() { layers.forEach((l) => { const el = elOf(l.id); el && place(el, l); }); tools(); if (tab === 'layers') panel(); }
+  function refreshSel() { if (sel !== lastSel) { editPts = false; selNode = -1; lastSel = sel; } layers.forEach((l) => { const el = elOf(l.id); el && place(el, l); }); tools(); if (tab === 'layers') panel(); }
 
   /* ---------- history ---------- */
   const save = () => { if (opts.admin) return; try { localStorage.setItem(key, JSON.stringify(layers.filter((l) => !l.local))); } catch (e) {} };
@@ -267,7 +302,9 @@ export function mountStudio(root, skin, H, opts = {}) {
     afterAdd(false);
   }
   function addShape(k) {
-    mutate(() => { const l = { id: nid(), t: 'shape', k, fill: '#00e5ff', fill2: '#8b5cf6', grad: false, ang: 45, stroke: '#000000', sw: 0, rad: 0, shadow: false, x: 0.5, y: 0.5, w: 0.25, sy: 1, rot: 0, flip: false, op: 1 }; layers.push(l); sel = l.id; });
+    mutate(() => { const l = { id: nid(), t: 'shape', k, fill: '#00e5ff', fill2: '#8b5cf6', grad: false, ang: 45, stroke: '#000000', sw: 0, rad: 0, shadow: false, x: 0.5, y: 0.5, w: 0.25, sy: 1, rot: 0, flip: false, op: 1 };
+      if (k === 'custom') { l.pts = outlinePts(PATHS.circle, 8); l.sm = true; editPts = true; selNode = -1; }
+      layers.push(l); sel = l.id; lastSel = sel; });
     afterAdd(true);
   }
   function addLocal(f) {
@@ -327,6 +364,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   });
   const STEP = {
     bdc: { get: (l) => Math.round((l.t === 'shape' ? (l.sw || 0) * l.w : (l.strokeW || 0) * l.fs) * 1000), set: (l, v) => { v = clamp(v, 0, 40); if (l.t === 'shape') l.sw = v / 1000 / l.w; else l.strokeW = clamp(v / 1000 / l.fs, 0, 0.6); } },
+    ptn: { get: (l) => (l.k === 'custom' && l.pts ? l.pts.length : 0), set: (l, v) => { const n = clamp(Math.round(v), 3, 40); l.pts = outlinePts(shapeD(l), n); if (l.k !== 'custom') { l.sm = l.k === 'circle'; l.k = 'custom'; } } },
     rdc: { get: (l) => Math.round((l.rad || 0) * 100), set: (l, v) => { l.rad = clamp(v, 0, 50) / 100; } },
   };
   Object.entries(STEP).forEach(([id, st]) => {
@@ -335,6 +373,21 @@ export function mountStudio(root, skin, H, opts = {}) {
       mutate(() => st.set(l, b.dataset.v !== undefined ? +b.dataset.v : st.get(l) + +b.dataset.s));
     }));
   });
+  q$('#ptE').onclick = () => {
+    const l = cur(); if (!l || l.t !== 'shape') return;
+    if (l.k !== 'custom') { mutate(() => STEP.ptn.set(l, 8)); editPts = true; } else editPts = !editPts;
+    selNode = -1; refreshSel();
+  };
+  q$('#ptA').onclick = () => {
+    const l = cur(); if (!l || l.k !== 'custom' || l.pts.length >= 40) return;
+    mutate(() => { let bi = 0, bd = -1; l.pts.forEach((a, i) => { const b = l.pts[(i + 1) % l.pts.length], d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (d > bd) { bd = d; bi = i; } }); const a = l.pts[bi], b = l.pts[(bi + 1) % l.pts.length]; l.pts.splice(bi + 1, 0, [+((a[0] + b[0]) / 2).toFixed(2), +((a[1] + b[1]) / 2).toFixed(2)]); selNode = bi + 1; });
+    editPts = true; refreshSel();
+  };
+  q$('#ptD').onclick = () => {
+    const l = cur(); if (!l || l.k !== 'custom') return;
+    if (l.pts.length <= 3) return toast('কমপক্ষে ৩টি বিন্দু লাগবে', 'err');
+    mutate(() => { l.pts.splice(selNode >= 0 && selNode < l.pts.length ? selNode : l.pts.length - 1, 1); selNode = -1; });
+  };
   q$('#syr').onclick = () => { const l = cur(); if (l) mutate(() => { l.sy = 1; }); };
   q$('#rr').onclick = () => { const l = cur(); if (l && l.t === 'img') mutate(() => { l.hue = 0; l.sat = 1; l.bri = 1; }); };
   function tools() {
@@ -354,6 +407,12 @@ export function mountStudio(root, skin, H, opts = {}) {
       q$('#sf3').classList.toggle('hide', !l.g3);
       if (t === 'shape' || t === 'text') q$('#bdc .sv').textContent = STEP.bdc.get(l);
       if (t === 'shape' && l.k === 'rect') q$('#rdc .sv').textContent = STEP.rdc.get(l);
+      if (t === 'shape') {
+        const cu = l.k === 'custom';
+        q$('#ptn .sv').textContent = cu ? STEP.ptn.get(l) : '–';
+        q$('#ptw').classList.toggle('hide', !cu);
+        q$('#ptE').textContent = cu && editPts ? '✔ Done' : '✎ Edit points';
+      }
       q$('#srw').classList.toggle('hide', !(t === 'shape' && l.k === 'rect'));
     } else { q$('#op').value = 1; q$('#sy').value = 1; }
     qa('[data-act="undo"]')[0].disabled = !hist.length;
@@ -363,7 +422,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   /* ---------- pointer: move / scale / rotate / pinch (group সহ) ---------- */
   const itemsOf = (l) => members(l).map((o) => ({ o, x0: o.x, y0: o.y, w0: o.w, fs0: o.fs, rot0: o.rot || 0 }));
   const centroid = (items) => ({ x: items.reduce((s, i) => s + i.x0, 0) / items.length, y: items.reduce((s, i) => s + i.y0, 0) / items.length });
-  function down(e, id, mode) {
+  function down(e, id, mode, idx) {
     e.preventDefault(); e.stopPropagation();
     if (sel !== id) { sel = id; refreshSel(); }
     const l = cur(); if (!l) return;
@@ -378,7 +437,8 @@ export function mountStudio(root, skin, H, opts = {}) {
     const items = itemsOf(l), c = centroid(items);
     const pcx = r.left + c.x * r.width, pcy = r.top + c.y * r.height;
     snap0 = snap();
-    drag = { mode, px0: e.clientX, py0: e.clientY, items, cx: c.x, cy: c.y, pcx, pcy, d0: Math.hypot(e.clientX - pcx, e.clientY - pcy) || 1, a0: Math.atan2(e.clientY - pcy, e.clientX - pcx) };
+    if (mode === 'node') { selNode = idx; qa('.nd', elOf(id)).forEach((n, i) => n.classList.toggle('on', i === idx)); }
+    drag = { mode, idx, px0: e.clientX, py0: e.clientY, items, cx: c.x, cy: c.y, pcx, pcy, d0: Math.hypot(e.clientX - pcx, e.clientY - pcy) || 1, a0: Math.atan2(e.clientY - pcy, e.clientX - pcx) };
   }
   // k = বড়-ছোট গুণক, dth = ঘোরার ডিগ্রি (centroid ঘিরে)
   function applyXform(k, dth) {
@@ -432,6 +492,12 @@ export function mountStudio(root, skin, H, opts = {}) {
       const ddx = (e.clientX - drag.px0) / r.width, ddy = (e.clientY - drag.py0) / r.height;
       drag.items.forEach(({ o, x0, y0 }) => { o.x = clamp(x0 + ddx, -0.2, 1.2); o.y = clamp(y0 + ddy, -0.2, 1.2); });
       if (drag.items.length === 1) snapMove(l);
+    } else if (drag.mode === 'node' && l.pts && l.pts[drag.idx]) {
+      const el = elOf(l.id), rc = el.getBoundingClientRect(), th = (-(l.rot || 0) * Math.PI) / 180, dx = e.clientX - (rc.left + rc.width / 2), dy = e.clientY - (rc.top + rc.height / 2);
+      const rx = dx * Math.cos(th) - dy * Math.sin(th), ry = dx * Math.sin(th) + dy * Math.cos(th);
+      let u = rx / (el.offsetWidth * Z.z) + 0.5, v = ry / (el.offsetHeight * Z.z) + 0.5;
+      if (l.flip) u = 1 - u; if (l.flv) v = 1 - v;
+      l.pts[drag.idx] = [+clamp(u * 100, -30, 130).toFixed(2), +clamp(v * 100, -30, 130).toFixed(2)];
     } else if (drag.mode === 'scale') applyXform(Math.hypot(e.clientX - drag.pcx, e.clientY - drag.pcy) / drag.d0, 0);
     else if (drag.mode === 'rot') applyXform(1, (Math.atan2(e.clientY - drag.pcy, e.clientX - drag.pcx) - drag.a0) * 180 / Math.PI);
     else if (drag.mode === 'pinch' && pts.size >= 2) {
@@ -512,7 +578,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     qa('.st-tab, .rl[data-rt]').forEach((b) => b.classList.toggle('on', (b.dataset.t || b.dataset.rt) === tab));
     const p = q$('#panel');
     if (tab === 'vshape') {
-      p.innerHTML = `<p class="mut small" style="margin-bottom:10px">যেকোনো shape ট্যাপ করুন। তারপর Tools থেকে রং, gradient, outline, ↕ Stretch (চ্যাপ্টা/লম্বা) বদলান।</p><div class="vgrid">${SHAPES.map(([k, n]) => `<button class="vs" data-k="${k}" title="${n}">${shapeSvg({ k, fill: '#00e5ff', fill2: '#8b5cf6', grad: true, ang: 45, sw: 0, rad: 0.12 }, '0', 'vp' + k)}<small>${n}</small></button>`).join('')}</div>`;
+      p.innerHTML = `<p class="mut small" style="margin-bottom:10px">যেকোনো shape ট্যাপ করুন। তারপর Tools থেকে রং, gradient, outline, ↕ Stretch (চ্যাপ্টা/লম্বা) বদলান।</p><div class="vgrid"><button class="vs" data-k="custom" title="নিজের মতো shape বানান"><svg viewBox="0 0 100 100"><path d="M50,8C80,5 95,35 88,60C80,90 40,97 20,78C3,60 12,15 50,8Z" fill="none" stroke="#00e5ff" stroke-width="5" stroke-dasharray="8 6"/><circle cx="50" cy="8" r="7" fill="#fff"/><circle cx="88" cy="60" r="7" fill="#fff"/><circle cx="20" cy="78" r="7" fill="#fff"/></svg><small>Custom ✎</small></button>${SHAPES.map(([k, n]) => `<button class="vs" data-k="${k}" title="${n}">${shapeSvg({ k, fill: '#00e5ff', fill2: '#8b5cf6', grad: true, ang: 45, sw: 0, rad: 0.12 }, '0', 'vp' + k)}<small>${n}</small></button>`).join('')}</div>`;
       qa('.vs', p).forEach((b) => (b.onclick = () => addShape(b.dataset.k)));
       return;
     }
@@ -708,7 +774,8 @@ export function mountStudio(root, skin, H, opts = {}) {
       } else if (l.t === 'text') {
         out.push({ ...base, t: 'text', text: String(l.text || '').slice(0, 60), font: String(l.font || fonts()[0]).slice(0, 60), color: col(l.color, '#ffffff'), stroke: col(l.stroke, '#000000'), strokeW: num(l.strokeW, 0.08, 0, 0.6), fs: num(l.fs, 0.08, 0.015, 0.6), ...(l.grad ? { grad: true, ang: num(l.ang, 45, 0, 360), fill2: col(l.fill2, '#8b5cf6'), g3: !!l.g3, fill3: col(l.fill3, '#ff2e93') } : {}) });
       } else if (l.t === 'shape') {
-        out.push({ ...base, t: 'shape', k: SHAPES.some((s) => s[0] === l.k) ? l.k : 'rect', fill: col(l.fill, '#00e5ff'), fill2: col(l.fill2, '#8b5cf6'), fill3: col(l.fill3, '#ff2e93'), g3: !!l.g3, grad: !!l.grad, ang: num(l.ang, 45, 0, 360), stroke: col(l.stroke, '#000000'), sw: num(l.sw, 0, 0, 1), rad: num(l.rad, 0, 0, 0.5), shadow: !!l.shadow, w: num(l.w, 0.25, 0.03, 3) });
+        out.push({ ...base, t: 'shape', k: SHAPES.some((s) => s[0] === l.k) || (l.k === 'custom' && Array.isArray(l.pts) && l.pts.length >= 3) ? l.k : 'rect',
+          ...(l.k === 'custom' && Array.isArray(l.pts) && l.pts.length >= 3 ? { pts: l.pts.slice(0, 40).map((q) => [num(q && q[0], 50, -30, 130), num(q && q[1], 50, -30, 130)]), sm: !!l.sm } : {}), fill: col(l.fill, '#00e5ff'), fill2: col(l.fill2, '#8b5cf6'), fill3: col(l.fill3, '#ff2e93'), g3: !!l.g3, grad: !!l.grad, ang: num(l.ang, 45, 0, 360), stroke: col(l.stroke, '#000000'), sw: num(l.sw, 0, 0, 1), rad: num(l.rad, 0, 0, 0.5), shadow: !!l.shadow, w: num(l.w, 0.25, 0.03, 3) });
       }
     });
     if (missing) toast(`${missing}টি ডিজাইন আর নেই, সেগুলো বাদ দেওয়া হয়েছে`, 'err');
@@ -719,7 +786,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   const clean = () => layers.filter((l) => !l.local).map((l) => (l.t === 'img'
     ? { t: 'img', aid: l.aid, w: l.w, hue: l.hue || 0, sat: l.sat ?? 1, bri: l.bri ?? 1, ...common(l) }
     : l.t === 'shape'
-      ? { t: 'shape', k: l.k, fill: l.fill, fill2: l.fill2, fill3: l.fill3 || '#ff2e93', g3: !!l.g3, grad: !!l.grad, ang: l.ang ?? 45, stroke: l.stroke, sw: l.sw || 0, rad: l.rad || 0, shadow: !!l.shadow, w: l.w, ...common(l) }
+      ? { t: 'shape', k: l.k, ...(l.k === 'custom' ? { pts: l.pts, sm: !!l.sm } : {}), fill: l.fill, fill2: l.fill2, fill3: l.fill3 || '#ff2e93', g3: !!l.g3, grad: !!l.grad, ang: l.ang ?? 45, stroke: l.stroke, sw: l.sw || 0, rad: l.rad || 0, shadow: !!l.shadow, w: l.w, ...common(l) }
       : { t: 'text', text: l.text, font: l.font, color: l.color, stroke: l.stroke, strokeW: l.strokeW, fs: l.fs, ...(l.grad ? { grad: true, ang: l.ang ?? 45, fill2: l.fill2 || '#8b5cf6', g3: !!l.g3, fill3: l.fill3 || '#ff2e93' } : {}), ...common(l) }));
   function saveFile() {
     if (layers.some((l) => l.local)) toast('নিজের ছবিগুলো ফাইলে সেভ হবে না (শুধু Export এ আসে)', 'err');
