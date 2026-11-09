@@ -10,7 +10,7 @@ export const KINDS = [
   ['pattern', '🎨', 'Pattern / Texture'],
   ['logo', '🔰', 'Logo'],
 ];
-const SHORT = { banner: 'Banner', shape: 'Pack', name: 'Name', accessory: 'Parts', sticker: 'Sticker', pattern: 'Pattern', logo: 'Logo', fav: 'Fav', vshape: 'Shapes', text: 'Text', img: 'Image', layers: 'Layers' };
+const SHORT = { banner: 'Banner', shape: 'Pack', name: 'Name', accessory: 'Parts', sticker: 'Sticker', pattern: 'Pattern', logo: 'Logo', fav: 'Fav', vshape: 'Shapes', text: 'Text', img: 'Image', ref: 'Ref', zones: 'Zones', layers: 'Layers' };
 export const filt = (l) => ((l.hue || 0) || (l.sat ?? 1) !== 1 || (l.bri ?? 1) !== 1 ? `hue-rotate(${l.hue || 0}deg) saturate(${l.sat ?? 1}) brightness(${l.bri ?? 1})` : '');
 
 /* ---------- Basic shapes ---------- */
@@ -133,7 +133,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   const key = 'studio:' + skin.id + (opts.template ? ':' + opts.template.id : '');
   let layers = [], sel = null, hist = [], fut = [], tab = 'banner', query = '', liveSnap = null, drag = null, snap0 = null;
   const pts = new Map(), vpts = new Map(), msel = new Set(), locals = new Map();
-  let vz = null, baseHid = false, editPts = false, selNode = -1, lastSel = null, baseIdx = 0;
+  let vz = null, baseHid = false, pickMode = false, showZones = false, editPts = false, selNode = -1, lastSel = null, baseIdx = 0;
   const Z = { z: 1, x: 0, y: 0 };
   let snapOn = true, tplId = opts.template ? opts.template.id : null;
   const guides = {};
@@ -148,7 +148,8 @@ export function mountStudio(root, skin, H, opts = {}) {
   const gcol = (g) => { let h = 0; for (const ch of String(g)) h = (h * 31 + ch.charCodeAt(0)) % 360; return `hsl(${h} 85% 60%)`; };
 
   /* ---------- layout ---------- */
-  const tabs = [['vshape', '▲', 'Shapes'], ['text', '✏', 'Text'], ...(opts.admin ? [] : [['img', '🖼', 'My image']]), ...KINDS, ...(H.toggleFav ? [['fav', '⭐', 'Favorites']] : []), ['layers', '☰', 'Layers']];
+  const hasZones = !opts.own && Array.isArray(skin.zones) && skin.zones.length > 0;
+  const tabs = [['vshape', '▲', 'Shapes'], ['text', '✏', 'Text'], ...(opts.admin ? [] : [['img', '🖼', 'My image'], ['ref', '📷', 'Reference']]), ...(hasZones ? [['zones', '▦', 'Zones']] : []), ...KINDS, ...(H.toggleFav ? [['fav', '⭐', 'Favorites']] : []), ['layers', '☰', 'Layers']];
   root.innerHTML = `<div class="wrap studio" data-drawer="">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px"><a href="${opts.admin ? '#/templates' : '#/studio'}" class="mut small">← Back</a><h2 class="grad" style="font-size:20px">${esc(skin.name)}</h2>${opts.admin ? '<span class="badge new">TEMPLATE BUILDER</span>' : opts.own ? '<span class="badge free">MY PNG</span>' : `<span class="badge ${skin.type}">${skin.type === 'paid' ? '⚡ ' + skin.price + ' CR' : 'FREE'}</span>`}${opts.template ? `<span class="badge paid">TEMPLATE: ${esc(opts.template.name)}</span>` : ''}</div>
     <nav class="rail" id="rail">${tabs.map((t) => `<button class="rl" data-rt="${t[0]}" title="${t[2]}"><span>${t[1]}</span><small>${SHORT[t[0]] || t[2]}</small></button>`).join('')}<i class="rsep"></i><button class="rl" data-ract="tools" title="Tools"><span>🛠</span><small>Tools</small></button><button class="rl" data-ract="undo"><span>↶</span><small>Undo</small></button><button class="rl" data-ract="redo"><span>↷</span><small>Redo</small></button><button class="rl go" data-ract="export"><span>⬇</span><small>${opts.admin ? 'Save' : 'Export'}</small></button></nav>
@@ -168,6 +169,7 @@ export function mountStudio(root, skin, H, opts = {}) {
             <input class="inp" type="color" id="tc" title="Text color"><input class="inp" type="color" id="ts" title="Outline color">
           </div>
           <div id="rctl" class="hide st-text"><b class="mut small">🎨 COLOR</b><label class="mut small">Hue</label><input type="range" id="rh" min="-180" max="180" step="1"><label class="mut small">Saturation</label><input type="range" id="rs" min="0" max="2" step="0.05"><label class="mut small">Brightness</label><input type="range" id="rb" min="0.3" max="1.7" step="0.05"><button class="tb wide" id="rr">Reset</button></div>
+          <div id="palc" class="st-text"><b class="mut small">🎨 COLORS</b><button class="tb wide" id="pickB" title="ছবি/স্ক্রিন থেকে রং তুলুন">💧 Pick</button><select class="inp" id="pk" style="width:auto;padding:6px 8px"><option value="fill">→ Fill / Text</option><option value="border">→ Border</option><option value="c2">→ Gradient 2</option></select><span id="pal" class="pal"></span></div>
           <div id="bctl" class="hide st-text">${stepper('bdc', 'Border')}</div>
           <div id="gctl" class="hide st-text"><b class="mut small">🌈 GRADIENT</b>
             <label class="chk mut small"><input type="checkbox" id="sg"> On</label>
@@ -257,6 +259,8 @@ export function mountStudio(root, skin, H, opts = {}) {
         el.appendChild(n);
       });
     }
+    el.style.pointerEvents = l.lock ? 'none' : '';
+    el.classList.toggle('ref', !!l.ref);
     el.classList.toggle('sel', l.id === sel);
     el.classList.toggle('gm', !!l.gid && !!c && c.gid === l.gid && l.id !== sel);
     el.style.setProperty('--gc', l.gid ? gcol(l.gid) : 'transparent');
@@ -310,9 +314,9 @@ export function mountStudio(root, skin, H, opts = {}) {
       layers.push(l); sel = l.id; lastSel = sel; });
     afterAdd(true);
   }
-  function addLocal(f) {
+  function addLocal(f, ref) {
     const url = URL.createObjectURL(f);
-    mutate(() => { const l = { id: nid(), t: 'img', local: true, aid: '', url, name: f.name || 'My image', x: 0.5, y: 0.5, w: 0.4, sy: 1, rot: 0, flip: false, op: 1 }; locals.set(l.id, f); layers.push(l); sel = l.id; });
+    mutate(() => { const l = { id: nid(), t: 'img', local: true, aid: '', url, name: (ref ? '📷 ' : '') + (f.name || 'My image'), x: 0.5, y: 0.5, w: ref ? 1 : 0.4, sy: 1, rot: 0, flip: false, op: ref ? 0.5 : 1 }; if (ref) { l.ref = true; l.lock = true; } locals.set(l.id, f); layers.push(l); sel = l.id; });
     afterAdd(false);
   }
   function addText() {
@@ -590,6 +594,29 @@ export function mountStudio(root, skin, H, opts = {}) {
       q$('#addTx').onclick = addText;
       return;
     }
+    if (tab === 'ref') {
+      p.innerHTML = `<p class="mut small" style="margin-bottom:12px">📷 আসল বাসের ছবি আধা-স্বচ্ছ করে ভাসিয়ে তার উপর shape/লেখা বসিয়ে কপি করুন। এই ছবি <b>Export এ আসবে না</b> আর ফাইলেও থাকবে না। ছবি lock থাকে (সরে না) — Layers এ 🔒 খুলে সরাতে পারেন। স্বচ্ছতা Tools এর Opacity দিয়ে।</p><label class="btn" style="width:100%;cursor:pointer">📷 Reference ছবি বেছে নিন<input type="file" id="refF" accept="image/png,image/jpeg,image/webp" class="hide"></label><button class="btn ghost" id="refPal" style="width:100%;margin-top:10px">🎨 ছবি থেকে রঙের Palette</button><button class="btn ghost" id="refPick" style="width:100%;margin-top:10px">💧 ছবি থেকে রং তুলুন</button>`;
+      q$('#refF').onchange = (e) => {
+        const f = e.target.files[0]; e.target.value = '';
+        if (!f) return;
+        if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return toast('শুধু PNG/JPG/WEBP', 'err');
+        if (f.size > 15 * 1024 * 1024) return toast('ছবি ১৫MB এর বেশি', 'err');
+        addLocal(f, true);
+      };
+      q$('#refPal').onclick = autoPalette; q$('#refPick').onclick = () => { closeDrawer(); pickColor(); };
+      return;
+    }
+    if (tab === 'zones') {
+      p.innerHTML = `<p class="mut small" style="margin-bottom:10px">এই skin এ নামের জন্য ঠিক করা জায়গাগুলো। ট্যাপ করে সেখানে shape/লেখা বসান, বা সিলেক্ট করা layer কে ওই জায়গায় ফিট করুন।</p><label class="chk mut small" style="margin-bottom:10px"><input type="checkbox" id="zshow" ${showZones ? 'checked' : ''}> Stage এ zone দেখান</label>${skin.zones.map((z, i) => `<div class="zrow" data-i="${i}"><b style="flex:1;min-width:70px">${esc(z.label || 'Zone ' + (i + 1))}</b><button class="btn ghost sm" data-zs>▭ Shape</button><button class="btn ghost sm" data-zt>T Text</button><button class="btn ghost sm" data-zf>⤢ Fit</button></div>`).join('')}`;
+      q$('#zshow').onchange = (e) => { showZones = e.target.checked; zonesOverlay(); };
+      qa('.zrow', p).forEach((r) => {
+        const z = skin.zones[+r.dataset.i];
+        r.querySelector('[data-zs]').onclick = () => zoneShape(z);
+        r.querySelector('[data-zt]').onclick = () => zoneText(z);
+        r.querySelector('[data-zf]').onclick = () => zoneFit(z);
+      });
+      return;
+    }
     if (tab === 'img') {
       p.innerHTML = `<p class="mut small" style="margin-bottom:12px">নিজের ছবি/লোগো (PNG, JPG, WEBP) যোগ করুন। 🔒 ফাইল আপলোড হয় না — শুধু আপনার ব্রাউজারে থাকে। ফাইলের ডিজাইন Save-এ ছবি থাকবে না, শুধু Export এ আসবে।</p><label class="btn" style="width:100%;cursor:pointer">🖼 ছবি বেছে নিন<input type="file" id="locF" accept="image/png,image/jpeg,image/webp" class="hide" multiple></label>`;
       q$('#locF').onchange = (e) => {
@@ -604,7 +631,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     }
     if (tab === 'layers') {
       const act2 = `<div class="lact"><button class="btn sm" id="gM">🔗 Merge</button><button class="btn ghost sm" id="gS">Ungroup</button><button class="btn ghost sm" id="gC">⧉ Copy</button><button class="btn danger sm" id="gD">🗑 Delete</button></div><p class="mut small" style="margin:6px 0 10px">২+ layer টিক দিয়ে <b>Merge</b> চাপলে সেগুলো একসাথে সরবে, বড়-ছোট হবে ও ঘুরবে। 👁 দিয়ে hide/show।</p>`;
-      const rowOf = (l) => `<div class="lrow ${l.id === sel ? 'on' : ''} ${l.hid ? 'hid' : ''}" data-id="${l.id}"><input type="checkbox" class="chk" data-m ${msel.has(l.id) ? 'checked' : ''}><span class="lth">${l.t === 'img' ? `<img src="${esc(l.url)}" alt="">` : l.t === 'shape' ? shapeSvg({ ...l, sw: 0 }, '0', 'lt' + l.id) : 'T'}</span><span class="lnm">${esc(l.t === 'text' ? l.text : l.t === 'shape' ? (SHAPES.find((s) => s[0] === l.k) || [0, 'Shape'])[1] : l.name)}</span>${l.gid ? `<i class="gtag" style="background:${gcol(l.gid)}" title="Group"></i>` : ''}<button class="lck" data-u title="উপরে আনুন">▲</button><button class="lck" data-dn title="নিচে নামান">▼</button><button class="lck" data-h title="Hide / Show">${l.hid ? '🚫' : '👁'}</button><button class="lck" data-x title="Delete">🗑</button></div>`;
+      const rowOf = (l) => `<div class="lrow ${l.id === sel ? 'on' : ''} ${l.hid ? 'hid' : ''}" data-id="${l.id}"><input type="checkbox" class="chk" data-m ${msel.has(l.id) ? 'checked' : ''}><span class="lth">${l.t === 'img' ? `<img src="${esc(l.url)}" alt="">` : l.t === 'shape' ? shapeSvg({ ...l, sw: 0 }, '0', 'lt' + l.id) : 'T'}</span><span class="lnm">${esc(l.t === 'text' ? l.text : l.t === 'shape' ? (SHAPES.find((s) => s[0] === l.k) || [0, 'Shape'])[1] : l.name)}</span>${l.gid ? `<i class="gtag" style="background:${gcol(l.gid)}" title="Group"></i>` : ''}<button class="lck" data-u title="উপরে আনুন">▲</button><button class="lck" data-dn title="নিচে নামান">▼</button><button class="lck" data-k title="Lock / Unlock">${l.lock ? '🔒' : '🔓'}</button><button class="lck" data-h title="Hide / Show">${l.hid ? '🚫' : '👁'}</button><button class="lck" data-x title="Delete">🗑</button></div>`;
       const baseRow = `<div class="lrow base ${baseHid ? 'hid' : ''}"><span class="lth"><img src="${esc(skin.preview)}" alt=""></span><span class="lnm">${opts.own ? 'Imported skin (base)' : 'Base skin'}</span><button class="lck" data-bu title="উপরে আনুন (layer এর উপরে)">▲</button><button class="lck" data-bdn title="নিচে নামান (layer এর নিচে)">▼</button><button class="lck" data-bh title="Hide / Show">${baseHid ? '🚫' : '👁'}</button></div>`;
       let rows = '';
       for (let i = layers.length - 1; i >= 0; i--) { if (i === bIdx() - 1) rows += baseRow; rows += rowOf(layers[i]); }
@@ -623,6 +650,7 @@ export function mountStudio(root, skin, H, opts = {}) {
         const id = r.dataset.id;
         r.onclick = () => { sel = id; refreshSel(); };
         r.querySelector('[data-m]').onclick = (e) => { e.stopPropagation(); e.target.checked ? msel.add(id) : msel.delete(id); };
+        r.querySelector('[data-k]').onclick = (e) => { e.stopPropagation(); const l = layers.find((x) => x.id === id); l && mutate(() => { l.lock = !l.lock; }); };
         r.querySelector('[data-h]').onclick = (e) => { e.stopPropagation(); const l = layers.find((x) => x.id === id); l && mutate(() => { l.hid = !l.hid; }); };
         r.querySelector('[data-x]').onclick = (e) => { e.stopPropagation(); mutate(() => { layers = layers.filter((x) => x.id !== id); msel.delete(id); if (!cur()) sel = null; }); };
       });
@@ -650,6 +678,105 @@ export function mountStudio(root, skin, H, opts = {}) {
     closeDrawer();
     if (a === 'export') { const x = q$('#exp') || q$('#tpSave'); x && x.click(); } else act(a);
   }));
+
+  /* ---------- colors: recent palette, eyedropper, auto palette ---------- */
+  let colors = [];
+  try { colors = JSON.parse(localStorage.getItem('studio:colors') || '[]').filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 14); } catch (e) {}
+  function renderPal() {
+    const b = q$('#pal');
+    b.innerHTML = colors.length ? colors.map((c) => `<i data-c="${c}" style="background:${c}" title="${c}"></i>`).join('') : '<span class="mut small">রং তুললে এখানে জমা হবে</span>';
+    qa('i', b).forEach((i) => (i.onclick = () => useColor(i.dataset.c, true)));
+  }
+  function addRecent(hex) { colors = [hex, ...colors.filter((c) => c !== hex)].slice(0, 14); try { localStorage.setItem('studio:colors', JSON.stringify(colors)); } catch (e) {} renderPal(); }
+  function applyColor(hex) {
+    const l = cur(), to = q$('#pk').value;
+    if (!l || (l.t !== 'shape' && l.t !== 'text')) return toast('রং বসাতে আগে একটি Shape বা Text সিলেক্ট করুন', 'err');
+    mutate(() => {
+      if (to === 'border') l.stroke = hex;
+      else if (to === 'c2') { l.fill2 = hex; l.grad = true; }
+      else if (l.t === 'text') l.color = hex; else l.fill = hex;
+      if (to === 'border' && l.t === 'shape' && !(l.sw > 0)) l.sw = 0.01;
+      if (to === 'border' && l.t === 'text' && !(l.strokeW > 0)) l.strokeW = 0.08;
+    });
+  }
+  function useColor(hex, fromSwatch) { if (!fromSwatch) addRecent(hex); applyColor(hex); }
+  const sCache = new Map();
+  let baseCan = null;
+  { const bi = new Image(); bi.crossOrigin = 'anonymous'; bi.onload = () => { try { const c = document.createElement('canvas'); c.width = bi.naturalWidth; c.height = bi.naturalHeight; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(bi, 0, 0); x.getImageData(0, 0, 1, 1); baseCan = c; } catch (e) {} }; bi.src = skin.preview; }
+  const hex2 = (d) => '#' + [d[0], d[1], d[2]].map((n) => n.toString(16).padStart(2, '0')).join('');
+  function sampleAt(cx, cy) {
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const l = layers[i], el = l.local && !l.hid ? elOf(l.id) : null;
+      if (!el) continue;
+      const rc = el.getBoundingClientRect(), th = (-(l.rot || 0) * Math.PI) / 180, dx = cx - (rc.left + rc.width / 2), dy = cy - (rc.top + rc.height / 2);
+      let u = (dx * Math.cos(th) - dy * Math.sin(th)) / (el.offsetWidth * Z.z) + 0.5, v = (dx * Math.sin(th) + dy * Math.cos(th)) / (el.offsetHeight * Z.z) + 0.5;
+      if (l.flip) u = 1 - u; if (l.flv) v = 1 - v;
+      if (u < 0 || u > 1 || v < 0 || v > 1) continue;
+      const im = el.querySelector('img'); if (!im || !im.naturalWidth) continue;
+      let c = sCache.get(l.id);
+      if (!c) { const k = Math.min(1, 600 / Math.max(im.naturalWidth, im.naturalHeight)); c = document.createElement('canvas'); c.width = Math.max(1, Math.round(im.naturalWidth * k)); c.height = Math.max(1, Math.round(im.naturalHeight * k)); c.getContext('2d', { willReadFrequently: true }).drawImage(im, 0, 0, c.width, c.height); sCache.set(l.id, c); }
+      const d = c.getContext('2d').getImageData(Math.min(c.width - 1, (u * c.width) | 0), Math.min(c.height - 1, (v * c.height) | 0), 1, 1).data;
+      if (d[3] >= 20) return hex2(d);
+    }
+    if (baseCan && !baseHid) {
+      const r = stg.getBoundingClientRect(), u = (cx - r.left) / r.width, v = (cy - r.top) / r.height;
+      if (u >= 0 && u <= 1 && v >= 0 && v <= 1) { const d = baseCan.getContext('2d').getImageData(Math.min(baseCan.width - 1, (u * baseCan.width) | 0), Math.min(baseCan.height - 1, (v * baseCan.height) | 0), 1, 1).data; if (d[3] >= 20) return hex2(d); }
+    }
+    return null;
+  }
+  async function pickColor() {
+    if (window.EyeDropper) { try { const r = await new window.EyeDropper().open(); useColor(r.sRGBHex); } catch (e) {} return; }
+    pickMode = true; vp.classList.add('picking'); toast('এখন ছবির উপর ট্যাপ করুন 💧');
+  }
+  vp.addEventListener('pointerdown', (e) => {
+    if (!pickMode) return;
+    e.preventDefault(); e.stopPropagation(); pickMode = false; vp.classList.remove('picking');
+    const c = sampleAt(e.clientX, e.clientY);
+    c ? useColor(c) : toast('এখানে কোনো ছবি নেই — Reference বা নিজের ছবি যোগ করুন', 'err');
+  }, true);
+  q$('#pickB').onclick = () => { closeDrawer(); pickColor(); };
+  async function autoPalette() {
+    const l = [...layers].reverse().find((x) => x.local && locals.has(x.id));
+    if (!l) return toast('আগে একটি Reference বা নিজের ছবি যোগ করুন', 'err');
+    try {
+      const bmp = await createImageBitmap(locals.get(l.id)), k = Math.min(1, 96 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
+      const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(bmp, 0, 0, c.width, c.height);
+      const d = x.getImageData(0, 0, c.width, c.height).data, bk = new Map();
+      for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 128) continue; const key = (d[i] >> 5) * 64 + (d[i + 1] >> 5) * 8 + (d[i + 2] >> 5), b = bk.get(key) || [0, 0, 0, 0]; b[0] += d[i]; b[1] += d[i + 1]; b[2] += d[i + 2]; b[3]++; bk.set(key, b); }
+      const cand = [...bk.values()].sort((a, b) => b[3] - a[3]).map((b) => [Math.round(b[0] / b[3]), Math.round(b[1] / b[3]), Math.round(b[2] / b[3])]), pick = [];
+      for (const cc of cand) { if (pick.every((q) => Math.hypot(q[0] - cc[0], q[1] - cc[1], q[2] - cc[2]) > 60)) pick.push(cc); if (pick.length >= 8) break; }
+      pick.reverse().forEach((q) => addRecent(hex2(q)));
+      toast(pick.length + 'টি রং Palette এ যোগ হয়েছে 🎨');
+    } catch (e) { toast('Palette বের করা যায়নি', 'err'); }
+  }
+
+  /* ---------- zones: নাম বসানোর জায়গা ---------- */
+  function zonesOverlay() {
+    qa('.zone', stg).forEach((z) => z.remove());
+    if (!showZones || !hasZones) return;
+    skin.zones.forEach((z, i) => {
+      const d = document.createElement('div');
+      d.className = 'zone';
+      Object.assign(d.style, { left: z.x * 100 + '%', top: z.y * 100 + '%', width: z.w * 100 + '%', height: z.h * 100 + '%', transform: `rotate(${z.rot || 0}deg)` });
+      d.innerHTML = `<span>${esc(z.label || 'Zone ' + (i + 1))}</span>`;
+      stg.appendChild(d);
+    });
+  }
+  function fitToZone(l, z) {
+    const W = stg.clientWidth, R = stg.clientHeight / W;
+    l.x = z.x + z.w / 2; l.y = z.y + z.h / 2; l.rot = z.rot || 0; if (z.mirror) l.flip = true;
+    if (l.t === 'shape') { l.w = clamp(z.w, 0.03, 3); l.sy = clamp((z.h * R) / z.w, 0.05, 8); }
+    else if (l.t === 'img') l.w = clamp(Math.min(z.w, (z.h * R) / ((l.nar || 1) * (l.sy || 1))), 0.03, 3);
+    else {
+      const cx = document.createElement('canvas').getContext('2d'); cx.font = `800 100px "${l.font}", sans-serif`;
+      const tw = Math.max(1, cx.measureText(l.text).width) / 100, fp = Math.min((z.w * W * 0.95) / tw, (z.h * R * W) / (1.1 * (l.sy || 1)));
+      l.fs = clamp(fp / W, 0.015, 0.6);
+    }
+  }
+  function zoneShape(z) { mutate(() => { const l = { id: nid(), t: 'shape', k: 'rect', fill: '#00e5ff', fill2: '#8b5cf6', grad: false, ang: 45, stroke: '#000000', sw: 0, rad: 0, shadow: false, x: 0.5, y: 0.5, w: 0.25, sy: 1, rot: 0, flip: false, op: 1 }; fitToZone(l, z); layers.push(l); sel = l.id; }); afterAdd(true); }
+  function zoneText(z) { mutate(() => { const l = { id: nid(), t: 'text', text: z.label || 'MY BUS', font: fonts()[0], color: '#ffffff', stroke: '#000000', strokeW: 0.08, fs: 0.08, x: 0.5, y: 0.5, sy: 1, rot: 0, flip: false, op: 1 }; fitToZone(l, z); layers.push(l); sel = l.id; }); afterAdd(true); }
+  function zoneFit(z) { const l = cur(); if (!l) return toast('আগে একটি layer সিলেক্ট করুন', 'err'); mutate(() => fitToZone(l, z)); }
 
   /* ---------- cost ---------- */
   function calc() {
@@ -705,7 +832,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   if (q$('#exp')) q$('#exp').onclick = async (ev) => {
     const btn = ev.currentTarget;
     if (!S.user) return H.loginModal('Login করে Export করুন');
-    const vis = layers.filter((l) => !l.hid);
+    const vis = layers.filter((l) => !l.hid && !l.ref);
     if (!vis.length && !confirm('কোনো ডিজাইন যোগ করা হয়নি। শুধু base skin Export করবেন?')) return;
     const { ids, cost: c } = calc();
     let sid = null;
@@ -726,7 +853,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       for (let li = 0; li <= layers.length; li++) {
         if (li === bIdx() && !baseHid) x.drawImage(baseBmp, 0, 0);
         const l = layers[li];
-        if (!l || l.hid) continue;
+        if (!l || l.hid || l.ref) continue;
         const sy = l.sy || 1;
         x.save();
         x.globalAlpha = l.op ?? 1;
@@ -774,7 +901,8 @@ export function mountStudio(root, skin, H, opts = {}) {
     (Array.isArray(list) ? list : []).slice(0, 80).forEach((l) => {
       if (!l || typeof l !== 'object') return;
       if (l.local) { localSkip++; return; }
-      const base = { id: nid(), x: num(l.x, 0.5, -0.5, 1.5), y: num(l.y, 0.5, -0.5, 1.5), rot: num(l.rot, 0, -3600, 3600), flip: !!l.flip, op: num(l.op, 1, 0.05, 1), sy: num(l.sy, 1, 0.2, 4) };
+      const base = { id: nid(), x: num(l.x, 0.5, -0.5, 1.5), y: num(l.y, 0.5, -0.5, 1.5), rot: num(l.rot, 0, -3600, 3600), flip: !!l.flip, op: num(l.op, 1, 0.05, 1), sy: num(l.sy, 1, 0.05, 8) };
+      if (l.lock) base.lock = true;
       if (l.hid) base.hid = true;
       if (l.flv) base.flv = true;
       if (BLENDS.includes(l.bm) && l.bm !== 'normal') base.bm = l.bm;
@@ -794,7 +922,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     if (localSkip) toast(`${localSkip}টি নিজের ছবি ফাইলে থাকে না, তাই বাদ গেছে`, 'err');
     return out;
   }
-  const common = (l) => ({ x: l.x, y: l.y, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1, sy: l.sy || 1, ...(l.hid ? { hid: true } : {}), ...(l.flv ? { flv: true } : {}), ...(l.bm && l.bm !== 'normal' ? { bm: l.bm } : {}), ...(l.gid ? { gid: l.gid } : {}) });
+  const common = (l) => ({ x: l.x, y: l.y, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1, sy: l.sy || 1, ...(l.hid ? { hid: true } : {}), ...(l.lock ? { lock: true } : {}), ...(l.flv ? { flv: true } : {}), ...(l.bm && l.bm !== 'normal' ? { bm: l.bm } : {}), ...(l.gid ? { gid: l.gid } : {}) });
   const clean = () => layers.filter((l) => !l.local).map((l) => (l.t === 'img'
     ? { t: 'img', aid: l.aid, w: l.w, hue: l.hue || 0, sat: l.sat ?? 1, bri: l.bri ?? 1, ...common(l) }
     : l.t === 'shape'
@@ -840,7 +968,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       if (Array.isArray(d) && d.length) { layers = hydrate(d); if (layers.length) toast('আগের ডিজাইন ফিরিয়ে আনা হয়েছে (Clear all চাপলে নতুন শুরু)'); }
     } catch (e) {}
   }
-  renderStage(); tools(); cost(); panel(); applyZ();
+  renderStage(); tools(); cost(); panel(); applyZ(); renderPal(); zonesOverlay();
   H.onAssets(() => { if (['text', 'vshape', 'img', 'layers'].indexOf(tab) < 0) panel(); cost(); });
   return {
     destroy() {

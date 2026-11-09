@@ -302,3 +302,12 @@ footer{border-top:1px solid var(--line);margin-top:50px;padding:30px 0;color:var
 .ly .nd.on{background:var(--c3);border-color:#fff}
 @media(max-width:860px){.ly .nd{width:24px;height:24px;margin:-12px 0 0 -12px}}
 .gl{z-index:9999}
+
+/* ===== Studio v8: reference, colors, zones ===== */
+.ly.ref{outline:1px dashed var(--c3)}
+.vp.picking,.vp.picking *{cursor:crosshair!important}
+.pal{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.pal i{width:26px;height:26px;border-radius:7px;border:1px solid rgba(255,255,255,.35);cursor:pointer;display:inline-block}
+.zone{position:absolute;border:2px dashed var(--c3);pointer-events:none;z-index:8000;background:rgba(255,210,63,.08)}
+.zone span{position:absolute;left:0;bottom:100%;background:rgba(0,0,0,.7);color:#fff;font-size:11px;padding:1px 5px;border-radius:4px;white-space:nowrap;transform:scale(calc(1/var(--z,1)));transform-origin:left bottom}
+.zrow{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
