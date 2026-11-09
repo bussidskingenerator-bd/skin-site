@@ -6,7 +6,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { getDatabase, ref, onValue, get, set, remove, query, limitToLast } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 import { drawZones, groupLabels } from './render.js';
-import { mountStudio, filt } from './editor.js';
+import { mountStudio, miniLayersHtml } from './editor.js';
 
 const app = initializeApp(FIREBASE);
 const auth = getAuth(app);
@@ -406,15 +406,7 @@ function runAd(purpose, skinId) {
 function tplMini(t) {
   const sk = S.skins.find((x) => x.id === t.skinId);
   if (!sk) return '';
-  const L = (t.layers || []).map((l) => {
-    const pos = `left:${(l.x * 100).toFixed(2)}%;top:${(l.y * 100).toFixed(2)}%;transform:translate(-50%,-50%) rotate(${l.rot || 0}deg);opacity:${l.op ?? 1}`;
-    if (l.t === 'img') {
-      const a = S.assets.find((x) => x.id === l.aid);
-      return a ? `<div class="ml" style="${pos};width:${(l.w * 100).toFixed(2)}%"><img src="${esc(a.preview)}" alt="" style="${l.flip ? 'transform:scaleX(-1);' : ''}filter:${filt(l) || 'none'}"></div>` : '';
-    }
-    const fs = (l.fs * 100).toFixed(2);
-    return `<div class="ml mtx" style="${pos};font-size:${fs}cqw;font-family:'${esc(l.font)}',sans-serif;color:${esc(l.color)};-webkit-text-stroke:${((l.strokeW || 0) * fs).toFixed(2)}cqw ${esc(l.stroke)};paint-order:stroke fill"><span style="display:inline-block;${l.flip ? 'transform:scaleX(-1)' : ''}">${esc(l.text)}</span></div>`;
-  }).join('');
+  const L = miniLayersHtml(t.layers, (id) => S.assets.find((x) => x.id === id), esc);
   return `<div class="card glow skin tpl" data-id="${t.id}"><div class="im mm"><div class="mini" style="aspect-ratio:${sk.w || 1}/${sk.h || 1}"><img class="bs" src="${esc(sk.preview)}" alt="">${L}</div><div class="tags"><span class="badge new">TEMPLATE</span>${t.price > 0 ? `<span class="badge paid">⚡ +${t.price}</span>` : ''}</div></div><div class="meta"><h4>${esc(t.name)}</h4><div><span>${esc(t.category || '—')}</span><span>${esc(sk.name)}</span></div></div></div>`;
 }
 
