@@ -1,3 +1,4 @@
+import { cropDialog, cropToFile, removeBgDialog } from './imgtools.js';
 // Skin Studio v4 — drag & drop design editor (কোনো বাইরের লাইব্রেরি ছাড়া)
 // Layer এর মান সব অনুপাতে (0..1) রাখা হয়, তাই preview ও full-quality export একই জায়গায় মেলে।
 
@@ -192,7 +193,7 @@ export function mountStudio(root, skin, H, opts = {}) {
             </div>
             <div class="pg" data-g="stroke" data-t="text shape" data-l="✒ Stroke"><span class="inl" data-t="text"><label class="mut small">Stroke color</label><input class="inp" type="color" id="ts"></span><span class="inl" data-t="shape"><label class="mut small">Stroke color</label><input class="inp" type="color" id="ss"></span>${stepper('bdc', 'Width')}</div>
             <div class="pg" data-g="shadow" data-t="text shape img" data-l="◐ Shadow"><label class="chk mut small"><input type="checkbox" id="sh"> Shadow ON</label><span class="inl"><label class="mut small">Color</label><input class="inp" type="color" id="shc"></span><span class="inl"><label class="mut small">Blur</label><input type="range" id="shb" min="0" max="0.06" step="0.002"></span><span class="inl"><label class="mut small">← →</label><input type="range" id="shx" min="-0.05" max="0.05" step="0.002"></span><span class="inl"><label class="mut small">↑ ↓</label><input type="range" id="shy" min="-0.05" max="0.05" step="0.002"></span></div>
-            <div class="pg" data-g="imgc" data-t="img" data-l="🎚 Adjust colors"><label class="mut small">Hue</label><input type="range" id="rh" min="-180" max="180" step="1"><label class="mut small">Saturation</label><input type="range" id="rs" min="0" max="2" step="0.05"><label class="mut small">Brightness</label><input type="range" id="rb" min="0.3" max="1.7" step="0.05"><button class="tb wide" id="rr">Reset</button></div>
+            <div class="pg" data-g="crop" data-t="img" data-l="✂ Crop"><button class="tb wide" id="crB">✂ Crop…</button><button class="tb wide" id="bgB">✨ Remove BG</button><p class="mut small">নিজের ছবির জন্য। Asset ছবি Admin আপলোডের সময় crop হয়।</p></div><div class="pg" data-g="imgc" data-t="img" data-l="🎚 Adjust colors"><label class="mut small">Hue</label><input type="range" id="rh" min="-180" max="180" step="1"><label class="mut small">Saturation</label><input type="range" id="rs" min="0" max="2" step="0.05"><label class="mut small">Brightness</label><input type="range" id="rb" min="0.3" max="1.7" step="0.05"><button class="tb wide" id="rr">Reset</button></div>
             <div class="pg" data-g="shape" data-t="shape" data-l="◆ Shape">
               <span id="srw" class="inl hide">${stepper('rdc', 'Corner')}</span>
               <b class="mut small" style="width:100%">✎ POINTS (বিন্দু টেনে নিজের মতো shape)</b>
@@ -342,8 +343,32 @@ export function mountStudio(root, skin, H, opts = {}) {
   }
   function addLocal(f, ref) {
     const url = URL.createObjectURL(f);
-    mutate(() => { const l = { id: nid(), t: 'img', local: true, aid: '', url, name: (ref ? '📷 ' : '') + (f.name || 'My image'), x: 0.5, y: 0.5, w: ref ? 0.6 : 0.4, sy: 1, rot: 0, flip: false, op: ref ? 0.5 : 1 }; if (ref) { l.ref = true; l.lock = false; } locals.set(l.id, f); layers.push(l); sel = l.id; });
+    mutate(() => { const l = { id: nid(), t: 'img', local: true, aid: '', url, name: (ref ? '📷 ' : '') + (f.name || 'My image'), x: 0.5, y: 0.5, w: ref ? 0.6 : 0.4, sy: 1, rot: 0, flip: false, op: ref ? 0.5 : 1 }; if (ref) { l.ref = true; l.lock = false; } locals.set(url, f); layers.push(l); sel = l.id; });
     afterAdd(false);
+  }
+  function replaceLocal(l, f) {
+    const url = URL.createObjectURL(f);
+    locals.set(url, f);
+    mutate(() => { l.url = url; l.name = (l.ref ? '📷 ' : '') + f.name; });
+  }
+  async function editLocal(l, how) {
+    const f = locals.get(l.url); if (!f) return toast('ফাইল পাওয়া যায়নি', 'err');
+    if (how === 'crop') {
+      const cr = await cropDialog(modal, l.url); if (!cr) return;
+      try { replaceLocal(l, await cropToFile(f, cr)); } catch (e) { toast('Crop হয়নি', 'err'); }
+    } else {
+      const nf = await removeBgDialog(modal, f); if (nf) replaceLocal(l, nf);
+    }
+  }
+  function importFlow(f, isRef) {
+    let cur = f, u = URL.createObjectURL(f);
+    const ov = modal(`<button class="x" data-close>×</button><h3 class="grad">🖼 ছবি যোগ</h3><div class="imp"><img id="impI" src="${u}" alt=""></div><div class="lact" style="margin-top:10px"><button class="btn ghost sm" id="impC">✂ Crop</button><button class="btn ghost sm" id="impB">✨ Remove BG</button><button class="btn sm" id="impA">✔ যোগ করুন</button></div>`);
+    const img = ov.querySelector('#impI'); let done = false;
+    const setF = (nf) => { cur = nf; URL.revokeObjectURL(u); u = URL.createObjectURL(nf); img.src = u; };
+    ov.querySelector('#impC').onclick = async () => { const cr = await cropDialog(modal, u); if (cr) setF(await cropToFile(cur, cr)); };
+    ov.querySelector('#impB').onclick = async () => { const nf = await removeBgDialog(modal, cur); if (nf) setF(nf); };
+    ov.querySelector('#impA').onclick = () => { done = true; addLocal(cur, isRef); ov.close ? ov.close() : ov.remove(); };
+    ov.onClose = () => { URL.revokeObjectURL(u); };
   }
   function addText() {
     mutate(() => { const l = { id: nid(), t: 'text', text: 'MY BUS', font: fonts()[0], color: '#ffffff', stroke: '#000000', strokeW: 0.08, fs: 0.08, x: 0.5, y: 0.5, sy: 1, rot: 0, flip: false, op: 1 }; layers.push(l); sel = l.id; });
@@ -355,7 +380,6 @@ export function mountStudio(root, skin, H, opts = {}) {
     arr.forEach((m) => {
       const c = { ...m, id: nid(), x: clamp(m.x + 0.04, 0, 1), y: clamp(m.y + 0.04, 0, 1) };
       if (m.gid) { gm[m.gid] = gm[m.gid] || gidn(); c.gid = gm[m.gid]; } else delete c.gid;
-      if (m.local && locals.has(m.id)) locals.set(c.id, locals.get(m.id));
       layers.push(c); ids[m.id] = c.id;
     });
     return ids;
@@ -422,6 +446,8 @@ export function mountStudio(root, skin, H, opts = {}) {
     mutate(() => { l.pts.splice(selNode >= 0 && selNode < l.pts.length ? selNode : l.pts.length - 1, 1); selNode = -1; });
   };
   q$('#syr').onclick = () => { const l = cur(); if (l) mutate(() => { l.sy = 1; }); };
+  q$('#crB').onclick = () => { const l = cur(); l && l.local && editLocal(l, 'crop'); };
+  q$('#bgB').onclick = () => { const l = cur(); l && l.local && editLocal(l, 'bg'); };
   q$('#rr').onclick = () => { const l = cur(); if (l && l.t === 'img') mutate(() => { l.hue = 0; l.sat = 1; l.bri = 1; }); };
   let pg = '';
   const DEFG = { text: 'text', shape: 'fill', img: 'imgc' };
@@ -431,7 +457,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     stud.dataset.sel = l ? '1' : '';
     if (!l) return;
     qa('[data-t]', pr).forEach((e) => e.classList.toggle('hide', !e.dataset.t.split(' ').includes(l.t)));
-    const gs = qa('.pg', pr).filter((g) => !g.classList.contains('hide'));
+    const gs = qa('.pg', pr).filter((g) => !g.classList.contains('hide') && !(g.dataset.g === 'crop' && !l.local));
     if (!gs.some((g) => g.dataset.g === pg)) pg = (gs.find((g) => g.dataset.g === DEFG[l.t]) || gs[0]).dataset.g;
     const lab = (g) => { const d = g.dataset.l; if (!d.includes(':')) return d; const m = Object.fromEntries(d.split('|').map((x) => x.split(':'))); return m[l.t] || d; };
     q$('#pchips').innerHTML = gs.map((g) => `<button class="pc2 ${g.dataset.g === pg ? 'on' : ''}" data-pg="${g.dataset.g}">${lab(g)}</button>`).join('');
@@ -639,7 +665,7 @@ export function mountStudio(root, skin, H, opts = {}) {
         if (!f) return;
         if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return toast('শুধু PNG/JPG/WEBP', 'err');
         if (f.size > 15 * 1024 * 1024) return toast('ছবি ১৫MB এর বেশি', 'err');
-        addLocal(f, true);
+        importFlow(f, true);
       };
       q$('#refPal').onclick = autoPalette; q$('#refPick').onclick = () => { closeDrawer(); pickColor(); };
       qa('.rfc', p).forEach((c) => {
@@ -668,10 +694,11 @@ export function mountStudio(root, skin, H, opts = {}) {
     if (tab === 'img') {
       p.innerHTML = `<p class="mut small" style="margin-bottom:12px">নিজের ছবি/লোগো (PNG, JPG, WEBP) যোগ করুন। 🔒 ফাইল আপলোড হয় না — শুধু আপনার ব্রাউজারে থাকে। ফাইলের ডিজাইন Save-এ ছবি থাকবে না, শুধু Export এ আসবে।</p><label class="btn" style="width:100%;cursor:pointer">🖼 ছবি বেছে নিন<input type="file" id="locF" accept="image/png,image/jpeg,image/webp" class="hide" multiple></label>`;
       q$('#locF').onchange = (e) => {
-        [...e.target.files].slice(0, 10).forEach((f) => {
+        const fl = [...e.target.files].slice(0, 10);
+        fl.forEach((f) => {
           if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return toast('শুধু PNG/JPG/WEBP', 'err');
           if (f.size > 15 * 1024 * 1024) return toast(f.name + ' — ১৫MB এর বেশি', 'err');
-          addLocal(f);
+          if (fl.length === 1) importFlow(f, false); else addLocal(f);
         });
         e.target.value = '';
       };
@@ -784,10 +811,10 @@ export function mountStudio(root, skin, H, opts = {}) {
   }, true);
   q$('#pickB').onclick = () => { closeDrawer(); pickColor(); };
   async function autoPalette() {
-    const l = [...layers].reverse().find((x) => x.local && locals.has(x.id));
+    const l = [...layers].reverse().find((x) => x.local && locals.has(x.url));
     if (!l) return toast('আগে একটি Reference বা নিজের ছবি যোগ করুন', 'err');
     try {
-      const bmp = await createImageBitmap(locals.get(l.id)), k = Math.min(1, 96 / Math.max(bmp.width, bmp.height));
+      const bmp = await createImageBitmap(locals.get(l.url)), k = Math.min(1, 96 / Math.max(bmp.width, bmp.height));
       const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
       const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(bmp, 0, 0, c.width, c.height);
       const d = x.getImageData(0, 0, c.width, c.height).data, bk = new Map();
@@ -892,7 +919,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       const [baseBmp, ...bmps] = await Promise.all([opts.own ? createImageBitmap(opts.own) : getFile(pre.token, skin.id), ...ids.map((id) => getFile(pre.token, id))]);
       const map = Object.fromEntries(ids.map((id, i) => [id, bmps[i]]));
       const lbm = {};
-      await Promise.all(vis.filter((l) => l.local).map(async (l) => { lbm[l.id] = await createImageBitmap(locals.get(l.id)); }));
+      await Promise.all(vis.filter((l) => l.local).map(async (l) => { lbm[l.id] = await createImageBitmap(locals.get(l.url)); }));
       const W = baseBmp.width, Hh = baseBmp.height;
       const cv = document.createElement('canvas'); cv.width = W; cv.height = Hh;
       const x = cv.getContext('2d');
@@ -1031,6 +1058,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', onRes);
       layers.forEach((l) => l.local && l.url && URL.revokeObjectURL(l.url));
+      locals.forEach((_, u) => URL.revokeObjectURL(u)); locals.clear();
     },
   };
 }
