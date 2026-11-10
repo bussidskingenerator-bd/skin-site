@@ -74,19 +74,30 @@ export function cropDialog(modal, src, init) {
 }
 
 // রঙ ধরে / জাদুকাঠি / ইরেজার দিয়ে ব্যাকগ্রাউন্ড স্বচ্ছ করা
+// AI মডেল (ব্রাউজারেই চলে; প্রথমবার ~৪০MB ডাউনলোড হয়, তারপর cache থাকে)
+const AI_URL = 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm';
+const boxBlur = (a, W, H, r) => {
+  const t = new Float32Array(a.length), k = 2 * r + 1;
+  for (let y = 0; y < H; y++) { let s = 0; const o = y * W; for (let x = -r; x <= r; x++) s += a[o + clamp(x, 0, W - 1)]; for (let x = 0; x < W; x++) { t[o + x] = s / k; s += a[o + clamp(x + r + 1, 0, W - 1)] - a[o + clamp(x - r, 0, W - 1)]; } }
+  for (let x = 0; x < W; x++) { let s = 0; for (let y = -r; y <= r; y++) s += t[clamp(y, 0, H - 1) * W + x]; for (let y = 0; y < H; y++) { a[y * W + x] = s / k; s += t[clamp(y + r + 1, 0, H - 1) * W + x] - t[clamp(y - r, 0, H - 1) * W + x]; } }
+  return a;
+};
 export async function removeBgDialog(modal, file) {
   const bmp = await createImageBitmap(file);
   const sc = Math.min(1, 1600 / Math.max(bmp.width, bmp.height)), W = Math.max(1, Math.round(bmp.width * sc)), H = Math.max(1, Math.round(bmp.height * sc));
   return new Promise((resolve) => {
     let fin = false, mode = 'magic', stroking = false;
     const ov = modal(`<button class="x" data-close>×</button><h3 class="grad">✨ Remove Background</h3>
-      <div class="rbm"><button class="tb wide on" data-m="magic">🪄 Magic</button><button class="tb wide" data-m="color">🎯 Same color</button><button class="tb wide" data-m="brush">🧹 Eraser</button><button class="tb wide" id="rbA">✨ Auto (কোণার রং)</button><button class="tb wide" id="rbU">↶ Undo</button></div>
-      <div class="rbs"><label class="mut small">Tolerance</label><input type="range" id="rbT" min="3" max="80" value="28"><span id="rbBw" class="hide"><label class="mut small">Brush</label><input type="range" id="rbB" min="4" max="120" value="30"></span></div>
+      <div class="rbm"><button class="tb wide on" data-m="magic">🪄 Magic</button><button class="tb wide" data-m="color">🎯 Same color</button><button class="tb wide" data-m="brush">🧹 Eraser</button><button class="tb wide" data-m="restore">♻ Restore</button><button class="tb wide" id="rbAI">🤖 AI Auto</button><button class="tb wide" id="rbA">✨ Smart Auto</button><button class="tb wide" id="rbU">↶ Undo</button></div>
+      <div class="rbs"><label class="mut small">Tolerance</label><input type="range" id="rbT" min="3" max="80" value="28"><label class="mut small">Smooth</label><input type="range" id="rbS" min="0" max="6" value="2" style="max-width:110px"><label class="mut small">Edge</label><input type="range" id="rbE" min="-5" max="5" value="0" style="max-width:110px"><button class="tb wide" id="rbR">⚙ Refine edge</button><span id="rbBw" class="hide"><label class="mut small">Brush</label><input type="range" id="rbB" min="4" max="120" value="30"></span></div>
       <p class="mut small" id="rbH">🪄 ব্যাকগ্রাউন্ডের উপর ট্যাপ করুন — লাগোয়া একই রঙের অংশ মুছে যাবে।</p>
       <div class="rbw"><canvas id="rbc"></canvas></div>
       <div class="row" style="margin-top:10px"><button class="btn" id="rbOk">✔ Done</button><button class="btn ghost" id="rbNo">Cancel</button></div>`, { wide: true });
     const q = (s) => ov.querySelector(s), cv = q('#rbc'), ctx = cv.getContext('2d', { willReadFrequently: true });
     cv.width = W; cv.height = H; ctx.drawImage(bmp, 0, 0, W, H);
+    const oc = document.createElement('canvas'); oc.width = W; oc.height = H; oc.getContext('2d').drawImage(bmp, 0, 0, W, H);
+    const od = oc.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+    const say = (t) => { q('#rbH').textContent = t; };
     const undo = [];
     const snap = () => { undo.push(ctx.getImageData(0, 0, W, H)); if (undo.length > 8) undo.shift(); };
     const tol = () => +q('#rbT').value * 2.55;
@@ -106,11 +117,11 @@ export async function removeBgDialog(modal, file) {
       }
     };
     const pos = (e) => { const r = cv.getBoundingClientRect(); return [clamp(Math.floor(((e.clientX - r.left) / r.width) * W), 0, W - 1), clamp(Math.floor(((e.clientY - r.top) / r.height) * H), 0, H - 1), r.width]; };
-    const erase = (e) => { const [x, y, rw] = pos(e), rad = (+q('#rbB').value * (W / rw)) / 2; ctx.save(); ctx.globalCompositeOperation = 'destination-out'; ctx.beginPath(); ctx.arc(x, y, rad, 0, 7); ctx.fill(); ctx.restore(); };
+    const erase = (e) => { const [x, y, rw] = pos(e), rad = (+q('#rbB').value * (W / rw)) / 2; if (mode === 'restore') { ctx.save(); ctx.beginPath(); ctx.arc(x, y, rad, 0, 7); ctx.clip(); ctx.drawImage(oc, 0, 0); ctx.restore(); return; } ctx.save(); ctx.globalCompositeOperation = 'destination-out'; ctx.beginPath(); ctx.arc(x, y, rad, 0, 7); ctx.fill(); ctx.restore(); };
     cv.onpointerdown = (e) => {
       e.preventDefault(); snap();
       const [x, y] = pos(e);
-      if (mode === 'brush') { stroking = true; cv.setPointerCapture(e.pointerId); erase(e); return; }
+      if (mode === 'brush' || mode === 'restore') { stroking = true; cv.setPointerCapture(e.pointerId); erase(e); return; }
       const im = ctx.getImageData(0, 0, W, H), d = im.data;
       if (mode === 'magic') flood(d, x, y);
       else { const i0 = (y * W + x) * 4, s = [d[i0], d[i0 + 1], d[i0 + 2]], t = tol(); for (let i = 0; i < d.length; i += 4) if (near(d, i, s, t)) d[i + 3] = 0; }
@@ -121,14 +132,41 @@ export async function removeBgDialog(modal, file) {
     ov.querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => {
       mode = b.dataset.m;
       ov.querySelectorAll('[data-m]').forEach((x) => x.classList.toggle('on', x === b));
-      q('#rbBw').classList.toggle('hide', mode !== 'brush');
-      q('#rbH').textContent = mode === 'magic' ? '🪄 ব্যাকগ্রাউন্ডের উপর ট্যাপ করুন — লাগোয়া একই রঙের অংশ মুছে যাবে।' : mode === 'color' ? '🎯 একটি রঙে ট্যাপ করুন — ছবির সব জায়গা থেকে ওই রং মুছে যাবে।' : '🧹 আঙুল/মাউস টেনে বাকি অংশ মুছুন।';
+      q('#rbBw').classList.toggle('hide', mode !== 'brush' && mode !== 'restore');
+      q('#rbH').textContent = mode === 'magic' ? '🪄 ব্যাকগ্রাউন্ডের উপর ট্যাপ করুন — লাগোয়া একই রঙের অংশ মুছে যাবে।' : mode === 'color' ? '🎯 একটি রঙে ট্যাপ করুন — ছবির সব জায়গা থেকে ওই রং মুছে যাবে।' : mode === 'restore' ? '♻ ভুলে মোছা অংশের উপর আঙুল/মাউস টানুন — আসল ছবি ফিরে আসবে।' : '🧹 আঙুল/মাউস টেনে বাকি অংশ মুছুন।';
     }));
+    const refine = (blur, shift) => {
+      const im = ctx.getImageData(0, 0, W, H), d = im.data, n = W * H;
+      let a = new Float32Array(n); for (let i = 0; i < n; i++) a[i] = d[i * 4 + 3] / 255;
+      if (blur > 0) { boxBlur(a, W, H, blur); boxBlur(a, W, H, blur); }
+      const sh = shift * 0.07;
+      for (let i = 0; i < n; i++) { const v = clamp((a[i] - 0.5 + sh) * 2.4 + 0.5, 0, 1); d[i * 4 + 3] = Math.round(v * 255); if (v > 0) { d[i * 4] = od[i * 4]; d[i * 4 + 1] = od[i * 4 + 1]; d[i * 4 + 2] = od[i * 4 + 2]; } }
+      ctx.putImageData(im, 0, 0);
+    };
+    q('#rbR').onclick = () => { snap(); refine(+q('#rbS').value, +q('#rbE').value); say('⚙ কিনারা মসৃণ করা হয়েছে। দরকারে আবার চাপুন বা Undo করুন।'); };
+    // Smart Auto: চার পাশের সীমানার প্রধান রংগুলো খুঁজে সেখান থেকে মোছে, তারপর কিনারা মসৃণ করে
     q('#rbA').onclick = () => {
       snap();
-      const im = ctx.getImageData(0, 0, W, H), d = im.data;
-      [[0, 0], [W - 1, 0], [0, H - 1], [W - 1, H - 1]].forEach(([x, y]) => flood(d, x, y));
-      ctx.putImageData(im, 0, 0);
+      const im = ctx.getImageData(0, 0, W, H), d = im.data, cnt = new Map(), step = Math.max(1, Math.floor((W + H) / 400));
+      const edge = [];
+      for (let x = 0; x < W; x += step) { edge.push([x, 0], [x, H - 1]); }
+      for (let y = 0; y < H; y += step) { edge.push([0, y], [W - 1, y]); }
+      edge.forEach(([x, y]) => { const i = (y * W + x) * 4; if (d[i + 3] < 9) return; const k = (d[i] >> 5) + ',' + (d[i + 1] >> 5) + ',' + (d[i + 2] >> 5); const c = cnt.get(k) || { n: 0, p: [x, y] }; c.n++; cnt.set(k, c); });
+      const tot = edge.length; [...cnt.values()].filter((c) => c.n / tot > 0.08).forEach((c) => flood(d, c.p[0], c.p[1]));
+      ctx.putImageData(im, 0, 0); refine(1, 0);
+      say('✨ Smart Auto হয়ে গেছে। বাকি অংশ 🪄 Magic/🧹 Eraser দিয়ে, আর ♻ Restore দিয়ে ভুলে মোছা অংশ ফেরান।');
+    };
+    q('#rbAI').onclick = async (ev) => {
+      const b = ev.currentTarget, old = b.textContent; b.disabled = true; b.textContent = '⏳ AI লোড হচ্ছে…';
+      say('🤖 AI মডেল লোড হচ্ছে — প্রথমবার ১ মিনিট মতো লাগতে পারে (ইন্টারনেট লাগবে)।');
+      try {
+        const mod = await import(/* @vite-ignore */ AI_URL);
+        const out = await (mod.removeBackground || mod.default)(file, { output: { format: 'image/png' } });
+        const bm = await createImageBitmap(out); snap();
+        ctx.clearRect(0, 0, W, H); ctx.drawImage(bm, 0, 0, W, H);
+        say('🤖 AI দিয়ে ব্যাকগ্রাউন্ড মোছা হয়েছে। দরকারে ♻ Restore / 🧹 Eraser দিয়ে ঠিক করুন।');
+      } catch (e) { say('❌ AI চালানো যায়নি (ইন্টারনেট/ব্রাউজার সমস্যা)। ✨ Smart Auto বা 🪄 Magic ব্যবহার করুন।'); }
+      b.disabled = false; b.textContent = old;
     };
     q('#rbU').onclick = () => { const s = undo.pop(); s && ctx.putImageData(s, 0, 0); };
     const finish = (v) => { fin = true; ov.close(); resolve(v); };

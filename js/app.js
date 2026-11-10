@@ -16,7 +16,7 @@ const db = getDatabase(app);
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const S = { user: null, me: null, admin: false, cfg: {}, skins: [], fonts: [], assets: [], templates: [], favs: {}, cats: [], stats: {}, orders: [], tx: [], ready: {}, view: '', f: { q: '', cat: '', type: '', sort: 'new' }, unsubs: [] };
+const S = { user: null, me: null, admin: false, cfg: {}, skins: [], fonts: [], assets: [], templates: [], favs: {}, coll: {}, cats: [], stats: {}, orders: [], tx: [], ready: {}, view: '', f: { q: '', cat: '', type: '', sort: 'new' }, unsubs: [] };
 const BASE_FONTS = ['Arial', 'Impact', 'Verdana', 'Georgia', 'Courier New', 'Trebuchet MS'];
 const fmtDate = (t) => new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -173,10 +173,11 @@ onAuthStateChanged(auth, async (u) => {
   S.unsubs.forEach((f) => f());
   S.unsubs = [];
   S.user = u;
-  S.me = null; S.admin = false; S.orders = []; S.tx = []; S.favs = {};
+  S.me = null; S.admin = false; S.orders = []; S.tx = []; S.favs = {}; S.coll = {};
   if (u) {
     try { await api('/api/me/init'); } catch (e) { toast(e.message, 'err'); }
     S.unsubs.push(onValue(ref(db, 'users/' + u.uid), (s) => { S.me = s.val(); renderHeader(); if (S.view === 'wallet') route(); }));
+    S.unsubs.push(onValue(ref(db, 'collected/' + u.uid), (s) => { S.coll = s.val() || {}; if (S.view === 'studio' && !S.made) route(); }));
     S.unsubs.push(onValue(ref(db, 'favorites/' + u.uid), (s) => { S.favs = s.val() || {}; S.editorRefresh && S.editorRefresh(); }));
     S.unsubs.push(onValue(ref(db, 'userOrders/' + u.uid), (s) => { S.orders = arr(s.val()).sort((a, b) => b.createdAt - a.createdAt); if (S.view === 'wallet') route(); }));
     S.unsubs.push(onValue(query(ref(db, 'transactions/' + u.uid), limitToLast(15)), (s) => { S.tx = arr(s.val()).sort((a, b) => b.at - a.at); if (S.view === 'wallet') route(); }));
@@ -304,7 +305,7 @@ function viewMake(id) {
           <input class="inp" data-i="${i}" data-k="text" maxlength="40" placeholder="${esc(z.label)} এ কী লিখবেন…">
           <div class="row" style="margin-top:8px"><select class="inp" data-i="${i}" data-k="font">${fontNames.map((f) => `<option ${f === vals[z.label].font ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select><input class="inp" type="color" data-i="${i}" data-k="color" value="${esc(vals[z.label].color)}"></div></div>`).join('') : '<p class="mut">এই skin এ লেখার জায়গা সেট করা নেই।</p>'}
         <button class="btn big" id="genBtn" style="width:100%">⚡ Generate &amp; Download</button>
-        <a class="btn ghost" href="#/studio/${skin.id}" style="width:100%;margin-top:10px">🎨 Open in Studio (banner, shape, sticker…)</a>
+        <a class="btn" href="#/studio/${skin.id}" style="width:100%;margin-top:10px">🎨 Full Edit Mode — Studio তে সাজান</a>
       </div></div></div></div>`;
   const cv = $('#cv'), ctx = cv.getContext('2d');
   const img = new Image();
@@ -404,10 +405,37 @@ function runAd(purpose, skinId) {
 
 /* ---------- studio ---------- */
 function tplMini(t) {
-  const sk = S.skins.find((x) => x.id === t.skinId);
+  const sk = S.skins.find((x) => x.id === t.skinId) || S.skins[0];
   if (!sk) return '';
   const L = miniLayersHtml(t.layers, (id) => S.assets.find((x) => x.id === id), esc);
-  return `<div class="card glow skin tpl" data-id="${t.id}"><div class="im mm"><div class="mini" style="aspect-ratio:${sk.w || 1}/${sk.h || 1}"><img class="bs" src="${esc(sk.preview)}" alt="">${L}</div><div class="tags"><span class="badge new">TEMPLATE</span>${t.price > 0 ? `<span class="badge paid">⚡ +${t.price}</span>` : ''}</div></div><div class="meta"><h4>${esc(t.name)}</h4><div><span>${esc(t.category || '—')}</span><span>${esc(sk.name)}</span></div></div></div>`;
+  return `<div class="card glow skin tpl" data-id="${t.id}"><div class="im mm"><div class="mini" style="aspect-ratio:${sk.w || 1}/${sk.h || 1}"><img class="bs" src="${esc(sk.preview)}" alt="">${L}</div><div class="tags"><span class="badge new">TEMPLATE</span>${t.price > 0 ? `<span class="badge paid">⚡ +${t.price}</span>` : ''}</div></div><div class="meta"><h4>${esc(t.name)}</h4><div><span>${esc(t.category || '—')}</span>${S.coll[t.id] ? '<span>✅ Collected</span>' : '<span>📥 Collect</span>'}</div></div></div>`;
+}
+function tplModal(t) {
+  const sk = S.skins.find((x) => x.id === t.skinId) || S.skins[0];
+  const L = miniLayersHtml(t.layers, (id) => S.assets.find((x) => x.id === id), esc);
+  const ov = modal(`<button class="x" data-close>×</button><h3 class="grad">${esc(t.name)}</h3>
+    <div class="mini" style="aspect-ratio:${sk.w || 1}/${sk.h || 1};max-width:420px;margin:10px auto;border-radius:12px"><img class="bs" src="${esc(sk.preview)}" alt="">${L}</div>
+    <p class="mut small c">${esc(t.category || '')} ${t.price > 0 ? ' · ⚡ ' + t.price + ' credit (Export এর সময়)' : ' · Free'}<br>এই ডিজাইন যেকোনো skin বা নিজের PNG এর উপর বসানো যায়।</p>
+    <div class="lact" style="margin-top:12px;justify-content:center"><button class="btn ghost" id="tcol">${S.coll[t.id] ? '✅ Collected — সরান' : '📥 Collect'}</button><button class="btn" id="tuse">🎨 Studio তে ব্যবহার করুন</button></div>`);
+  $('#tcol', ov).onclick = async () => {
+    if (!S.user) return loginModal('Login করে Collect করুন');
+    const r = ref(db, 'collected/' + S.user.uid + '/' + t.id);
+    try { S.coll[t.id] ? await remove(r) : await set(r, true); toast(S.coll[t.id] ? 'Collection থেকে সরানো হয়েছে' : 'Collection এ যোগ হয়েছে ✅'); ov.close(); } catch (e) { toast(e.message, 'err'); }
+  };
+  $('#tuse', ov).onclick = () => { ov.close(); baseModal(t); };
+}
+function baseModal(t) {
+  const ov = modal(`<button class="x" data-close>×</button><h3 class="grad">কোন skin এর উপর বসাবেন?</h3>
+    <p class="mut small" style="margin-bottom:10px">Template: <b>${esc(t.name)}</b> — একটি skin বেছে নিন, বা নিজের PNG দিন।</p>
+    <label class="btn ghost" style="width:100%;cursor:pointer;margin-bottom:12px">📤 নিজের Skin PNG দিয়ে<input type="file" id="bown" accept="image/png,image/jpeg" class="hide"></label>
+    <div class="grid" id="bsg" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;max-height:52vh;overflow:auto">${S.skins.map((s) => `<div class="card skin" data-s="${s.id}" style="padding:6px;cursor:pointer"><img src="${esc(s.preview)}" alt="" style="width:100%;border-radius:8px"><p class="small c" style="margin-top:4px">${esc(s.name)}</p></div>`).join('')}</div>`, { wide: true });
+  $$('[data-s]', ov).forEach((c) => (c.onclick = () => { ov.close(); location.hash = '#/studio/' + c.dataset.s + '/' + t.id; }));
+  $('#bown', ov).onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    if (!/^image\/(png|jpeg)$/.test(f.type)) return toast('শুধু PNG বা JPG দিন', 'err');
+    if (S.ownUrl) URL.revokeObjectURL(S.ownUrl);
+    S.ownFile = f; S.ownUrl = URL.createObjectURL(f); S.ownTpl = t.id; ov.close(); location.hash = '#/studio/own';
+  };
 }
 
 function viewStudio(id, tid) {
@@ -416,20 +444,22 @@ function viewStudio(id, tid) {
     if (!S.ownFile) { location.hash = '#/studio'; return; }
     S.made = true;
     const skin = { id: 'own', name: 'My skin', type: 'free', preview: S.ownUrl, own: true };
-    const ctl = mountStudio(v, skin, studioCtx(), { own: S.ownFile });
+    const ot = S.ownTpl ? S.templates.find((x) => x.id === S.ownTpl) : null; S.ownTpl = null;
+    const ctl = mountStudio(v, skin, studioCtx(), { own: S.ownFile, template: ot });
     S.studioDestroy = ctl.destroy;
     return;
   }
   if (!id) {
     const tab = S.stTab || 'tpl';
     v.innerHTML = `<div class="wrap sec"><div class="sec-h"><h2>Skin <span class="grad">Studio</span></h2></div>
-      <div class="chips" style="margin-bottom:20px"><span class="chip ${tab === 'tpl' ? 'on' : ''}" data-t="tpl">🎯 Ready Templates</span><span class="chip ${tab === 'skin' ? 'on' : ''}" data-t="skin">🚌 Base skins</span><span class="chip ${tab === 'own' ? 'on' : ''}" data-t="own">📤 My own PNG</span></div><div id="stc"></div></div>`;
+      <div class="chips" style="margin-bottom:20px"><span class="chip ${tab === 'tpl' ? 'on' : ''}" data-t="tpl">🎯 Templates</span><span class="chip ${tab === 'coll' ? 'on' : ''}" data-t="coll">📚 My Collection${Object.keys(S.coll).length ? ' (' + Object.keys(S.coll).length + ')' : ''}</span><span class="chip ${tab === 'skin' ? 'on' : ''}" data-t="skin">🚌 Base skins</span><span class="chip ${tab === 'own' ? 'on' : ''}" data-t="own">📤 My own PNG</span></div><div id="stc"></div></div>`;
     $$('.chips .chip', v).forEach((c) => (c.onclick = () => { S.stTab = c.dataset.t; clearTimers(); viewStudio(); }));
     const box = $('#stc');
-    if (tab === 'tpl') {
-      const l = S.templates.filter((t) => S.skins.some((x) => x.id === t.skinId));
-      box.innerHTML = `<p class="mut" style="margin-bottom:16px">তৈরি করা ডিজাইন বেছে নিন — খুলে নিজের নাম বসান বা যেকোনো কিছু বদলান।</p><div class="grid">${l.length ? l.map(tplMini).join('') : '<div class="empty" style="grid-column:1/-1">এখনো কোনো template নেই</div>'}</div>`;
-      $$('.tpl', box).forEach((c) => (c.onclick = () => { const t = S.templates.find((x) => x.id === c.dataset.id); location.hash = '#/studio/' + t.skinId + '/' + t.id; }));
+    if (tab === 'tpl' || tab === 'coll') {
+      const l = S.skins.length ? S.templates.filter((t) => tab === 'tpl' || S.coll[t.id]) : [];
+      const msg = tab === 'tpl' ? 'Template বেছে 📥 Collect করুন, তারপর যেকোনো skin বা নিজের PNG এর উপর বসিয়ে বদলান।' : S.user ? 'আপনার Collect করা template এখানে থাকবে।' : 'Collection দেখতে Login করুন।';
+      box.innerHTML = `<p class="mut" style="margin-bottom:16px">${msg}</p><div class="grid">${l.length ? l.map(tplMini).join('') : '<div class="empty" style="grid-column:1/-1">' + (tab === 'tpl' ? 'এখনো কোনো template নেই' : 'এখনো কিছু Collect করা হয়নি') + '</div>'}</div>`;
+      $$('.tpl', box).forEach((c) => (c.onclick = () => tplModal(S.templates.find((x) => x.id === c.dataset.id))));
     } else if (tab === 'skin') {
       const l = S.skins;
       box.innerHTML = `<p class="mut" style="margin-bottom:16px">একটি base skin বেছে নিন — তারপর Banner, Shape, Sticker, Name design ইত্যাদি টেনে এনে নিজের মতো সাজান।</p><div class="grid" id="sg">${l.length ? l.map(skinCard).join('') : '<div class="empty" style="grid-column:1/-1">এখনো কোনো skin নেই</div>'}</div>`;
