@@ -74,6 +74,56 @@ export function cropDialog(modal, src, init) {
 }
 
 // রঙ ধরে / জাদুকাঠি / ইরেজার দিয়ে ব্যাকগ্রাউন্ড স্বচ্ছ করা
+// ---- স্বয়ংক্রিয় ব্যাকগ্রাউন্ড মোছা (editor এর preview ও export দুই জায়গাতেই এটা চলে) ----
+export function autoBgCanvas(c, { tol = 28, smooth = 1, shift = 0 } = {}) {
+  const W = c.width, H = c.height, ctx = c.getContext('2d', { willReadFrequently: true });
+  const im = ctx.getImageData(0, 0, W, H), d = im.data, od = new Uint8ClampedArray(d), n = W * H, t = tol * 2.55;
+  const near = (i, s) => d[i + 3] > 8 && Math.max(Math.abs(d[i] - s[0]), Math.abs(d[i + 1] - s[1]), Math.abs(d[i + 2] - s[2])) <= t;
+  const seen = new Uint8Array(n), st = new Int32Array(n);
+  const flood = (sx, sy) => {
+    const i0 = (sy * W + sx) * 4; if (d[i0 + 3] <= 8) return;
+    const s = [d[i0], d[i0 + 1], d[i0 + 2]]; let k = 0; const p0 = sy * W + sx;
+    if (!seen[p0]) { seen[p0] = 1; st[k++] = p0; }
+    while (k) {
+      const p = st[--k], x = p % W, y = (p / W) | 0, i = p * 4;
+      if (!near(i, s)) continue;
+      d[i + 3] = 0;
+      if (x > 0 && !seen[p - 1]) { seen[p - 1] = 1; st[k++] = p - 1; }
+      if (x < W - 1 && !seen[p + 1]) { seen[p + 1] = 1; st[k++] = p + 1; }
+      if (y > 0 && !seen[p - W]) { seen[p - W] = 1; st[k++] = p - W; }
+      if (y < H - 1 && !seen[p + W]) { seen[p + W] = 1; st[k++] = p + W; }
+    }
+  };
+  const step = Math.max(1, Math.floor((W + H) / 400)), cnt = new Map(), edge = [];
+  for (let x = 0; x < W; x += step) edge.push([x, 0], [x, H - 1]);
+  for (let y = 0; y < H; y += step) edge.push([0, y], [W - 1, y]);
+  edge.forEach(([x, y]) => { const i = (y * W + x) * 4; if (d[i + 3] < 9) return; const k = (d[i] >> 5) + ',' + (d[i + 1] >> 5) + ',' + (d[i + 2] >> 5), e = cnt.get(k) || { n: 0, p: [x, y] }; e.n++; cnt.set(k, e); });
+  [...cnt.values()].filter((e) => e.n / edge.length > 0.08).forEach((e) => flood(e.p[0], e.p[1]));
+  let a = new Float32Array(n); for (let i = 0; i < n; i++) a[i] = d[i * 4 + 3] / 255;
+  const r = Math.round(smooth); if (r > 0) { boxBlur(a, W, H, r); boxBlur(a, W, H, r); }
+  const sh = shift * 0.07;
+  for (let i = 0; i < n; i++) { const v = clamp((a[i] - 0.5 + sh) * 2.4 + 0.5, 0, 1); d[i * 4 + 3] = Math.round(v * 255); if (v > 0) { d[i * 4] = od[i * 4]; d[i * 4 + 1] = od[i * 4 + 1]; d[i * 4 + 2] = od[i * 4 + 2]; } }
+  ctx.putImageData(im, 0, 0);
+  return c;
+}
+
+// ---- Mask (ছবির আকার কেটে নেওয়া) ----
+export const MASKS = [['', 'None'], ['circle', 'Circle / Oval'], ['rounded', 'Rounded'], ['diamond', 'Diamond'], ['triangle', 'Triangle'], ['hexagon', 'Hexagon'], ['star', 'Star']];
+export function maskCanvas(c, name) {
+  const W = c.width, H = c.height, x = c.getContext('2d'), cx = W / 2, cy = H / 2;
+  const poly = (pts) => { x.moveTo(pts[0][0] * W, pts[0][1] * H); pts.slice(1).forEach((p) => x.lineTo(p[0] * W, p[1] * H)); x.closePath(); };
+  x.save(); x.globalCompositeOperation = 'destination-in'; x.fillStyle = '#000'; x.beginPath();
+  if (name === 'circle') x.ellipse(cx, cy, W / 2, H / 2, 0, 0, Math.PI * 2);
+  else if (name === 'rounded') { const r = Math.min(W, H) * 0.22; x.moveTo(r, 0); x.arcTo(W, 0, W, H, r); x.arcTo(W, H, 0, H, r); x.arcTo(0, H, 0, 0, r); x.arcTo(0, 0, W, 0, r); x.closePath(); }
+  else if (name === 'diamond') poly([[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]]);
+  else if (name === 'triangle') poly([[0.5, 0], [1, 1], [0, 1]]);
+  else if (name === 'hexagon') poly([[0.25, 0.04], [0.75, 0.04], [1, 0.5], [0.75, 0.96], [0.25, 0.96], [0, 0.5]]);
+  else if (name === 'star') { const p = []; for (let i = 0; i < 10; i++) { const rr = i % 2 ? 0.22 : 0.5, a = -Math.PI / 2 + (i * Math.PI) / 5; p.push([0.5 + Math.cos(a) * rr * 1.0, 0.5 + Math.sin(a) * rr * 1.0]); } poly(p); }
+  else x.rect(0, 0, W, H);
+  x.fill(); x.restore();
+  return c;
+}
+
 // AI মডেল (ব্রাউজারেই চলে; প্রথমবার ~৪০MB ডাউনলোড হয়, তারপর cache থাকে)
 const AI_URL = 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm';
 const boxBlur = (a, W, H, r) => {

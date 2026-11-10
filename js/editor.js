@@ -1,4 +1,4 @@
-import { cropDialog, cropToFile, removeBgDialog } from './imgtools.js';
+import { cropDialog, cropToFile, removeBgDialog, autoBgCanvas, maskCanvas, MASKS } from './imgtools.js';
 // Skin Studio v4 — drag & drop design editor (কোনো বাইরের লাইব্রেরি ছাড়া)
 // Layer এর মান সব অনুপাতে (0..1) রাখা হয়, তাই preview ও full-quality export একই জায়গায় মেলে।
 
@@ -130,14 +130,14 @@ function recolor(bmp, l) {
   return c;
 }
 const DEF_W = { banner: 0.6, shape: 0.25, name: 0.5, accessory: 0.3, sticker: 0.2, pattern: 1, logo: 0.2 };
-const DEF = { op: 1, sy: 1, hue: 0, sat: 1, bri: 1, ang: 45, sw: 0, rad: 0, grad: false, shadow: false, fill: '#00e5ff', fill2: '#8b5cf6', fill3: '#ff2e93', g3: false, stroke: '#000000', bm: 'normal', shc: '#000000', shb: 0.03, shx: 0, shy: 0, tna: 1, tint: false };
+const DEF = { op: 1, sy: 1, hue: 0, sat: 1, bri: 1, ang: 45, sw: 0, rad: 0, grad: false, shadow: false, fill: '#00e5ff', fill2: '#8b5cf6', fill3: '#ff2e93', g3: false, stroke: '#000000', bm: 'normal', shc: '#000000', shb: 0.03, shx: 0, shy: 0, tna: 1, tint: false, bgt: 28, bgs: 1, bge: 0, mk: '' };
 // [selector, layer key, allowed types (null = সব), kind: n=number s=string b=bool]
 const BIND = [
   ['#op', 'op', null, 'n'], ['#sy', 'sy', null, 'n'], ['#bm', 'bm', null, 's'],
   ['#tt', 'text', ['text'], 's'], ['#tf', 'font', ['text'], 's'], ['#tc', 'color', ['text'], 's'], ['#ts', 'stroke', ['text'], 's'], 
   ['#rh', 'hue', ['img'], 'n'], ['#rs', 'sat', ['img'], 'n'], ['#rb', 'bri', ['img'], 'n'],
   ['#sf', 'fill', ['shape', 'img'], 's'], ['#sg', 'grad', ['shape', 'text', 'img'], 'b'], ['#sf2', 'fill2', ['shape', 'text', 'img'], 's'], ['#sg3', 'g3', ['shape', 'text', 'img'], 'b'], ['#sf3', 'fill3', ['shape', 'text', 'img'], 's'], ['#sa', 'ang', ['shape', 'text', 'img'], 'n'],
-  ['#tn', 'tint', ['img'], 'b'], ['#tna', 'tna', ['img'], 'n'],
+  ['#bgt', 'bgt', ['img'], 'n'], ['#bgs', 'bgs', ['img'], 'n'], ['#bge', 'bge', ['img'], 'n'], ['#mk', 'mk', ['img'], 's'], ['#tn', 'tint', ['img'], 'b'], ['#tna', 'tna', ['img'], 'n'],
   ['#ss', 'stroke', ['shape'], 's'], ['#sh', 'shadow', null, 'b'], ['#shc', 'shc', null, 's'], ['#shb', 'shb', null, 'n'], ['#shx', 'shx', null, 'n'], ['#shy', 'shy', null, 'n'], ['#ptS', 'sm', ['shape'], 'b'],
 ];
 
@@ -193,7 +193,18 @@ export function mountStudio(root, skin, H, opts = {}) {
             </div>
             <div class="pg" data-g="stroke" data-t="text shape" data-l="✒ Stroke"><span class="inl" data-t="text"><label class="mut small">Stroke color</label><input class="inp" type="color" id="ts"></span><span class="inl" data-t="shape"><label class="mut small">Stroke color</label><input class="inp" type="color" id="ss"></span>${stepper('bdc', 'Width')}</div>
             <div class="pg" data-g="shadow" data-t="text shape img" data-l="◐ Shadow"><label class="chk mut small"><input type="checkbox" id="sh"> Shadow ON</label><span class="inl"><label class="mut small">Color</label><input class="inp" type="color" id="shc"></span><span class="inl"><label class="mut small">Blur</label><input type="range" id="shb" min="0" max="0.06" step="0.002"></span><span class="inl"><label class="mut small">← →</label><input type="range" id="shx" min="-0.05" max="0.05" step="0.002"></span><span class="inl"><label class="mut small">↑ ↓</label><input type="range" id="shy" min="-0.05" max="0.05" step="0.002"></span></div>
-            <div class="pg" data-g="crop" data-t="img" data-l="✂ Crop"><button class="tb wide" id="crB">✂ Crop…</button><button class="tb wide" id="bgB">✨ Remove BG</button><p class="mut small">নিজের ছবির জন্য। Asset ছবি Admin আপলোডের সময় crop হয়।</p></div><div class="pg" data-g="imgc" data-t="img" data-l="🎚 Adjust colors"><label class="mut small">Hue</label><input type="range" id="rh" min="-180" max="180" step="1"><label class="mut small">Saturation</label><input type="range" id="rs" min="0" max="2" step="0.05"><label class="mut small">Brightness</label><input type="range" id="rb" min="0.3" max="1.7" step="0.05"><button class="tb wide" id="rr">Reset</button></div>
+            <div class="pg" data-g="crop" data-t="img" data-l="✂ Crop"><button class="tb wide" id="crB">✂ Crop…</button><button class="tb wide" id="crR">↺ Reset</button><button class="tb wide" id="bgB">🖌 Manual BG…</button></div>
+            <div class="pg" data-g="rmbg" data-t="img" data-l="✨ Remove BG"><label class="chk mut small"><input type="checkbox" id="bgo"> Auto remove background</label><label class="mut small">Tolerance</label><input type="range" id="bgt" min="5" max="80" step="1"><label class="mut small">Smooth</label><input type="range" id="bgs" min="0" max="4" step="1"><label class="mut small">Edge</label><input type="range" id="bge" min="-5" max="5" step="1"></div>
+            <div class="pg" data-g="mask" data-t="img" data-l="⬭ Mask"><label class="mut small">Shape</label><select class="inp" id="mk">${MASKS.map((m) => `<option value="${m[0]}">${m[1]}</option>`).join('')}</select></div>
+            <div class="pg" data-g="imgc" data-t="img" data-l="🎚 Adjust colors"><label class="mut small">Hue</label><input type="range" id="rh" min="-180" max="180" step="1"><label class="mut small">Saturation</label><input type="range" id="rs" min="0" max="2" step="0.05"><label class="mut small">Brightness</label><input type="range" id="rb" min="0.3" max="1.7" step="0.05"><button class="tb wide" id="rr">Reset</button></div>
+            <div class="pg" data-g="arr" data-t="text shape img" data-l="📐 Arrange">
+              <span class="inl"><label class="mut small">X%</label><input class="inp nn" type="number" id="nx" step="0.5"></span><span class="inl"><label class="mut small">Y%</label><input class="inp nn" type="number" id="ny" step="0.5"></span><span class="inl"><label class="mut small">W%</label><input class="inp nn" type="number" id="nw" step="0.5" min="1"></span><span class="inl"><label class="mut small">H%</label><input class="inp nn" type="number" id="nh" step="1" min="5"></span><span class="inl"><label class="mut small">Angle°</label><input class="inp nn" type="number" id="nr" step="1"></span>
+              <b class="mut small" style="width:100%">ALIGN (canvas এর সাপেক্ষে)</b>
+              <button class="tb" data-al="l" title="বামে">⇤</button><button class="tb" data-al="ch" title="মাঝে (আড়াআড়ি)">↔</button><button class="tb" data-al="r" title="ডানে">⇥</button><button class="tb" data-al="t" title="উপরে">⤒</button><button class="tb" data-al="cv" title="মাঝে (খাড়া)">↕</button><button class="tb" data-al="b" title="নিচে">⤓</button><button class="tb wide" data-al="c">⊕ Center</button>
+              <button class="tb wide" id="mir" title="উল্টো পাশে আয়নার মতো কপি">🪞 Mirror copy</button>
+              <b class="mut small" style="width:100%">REPEAT</b>
+              <span class="inl"><label class="mut small">Copies</label><input class="inp nn" type="number" id="rpn" min="2" max="20" value="4"></span><span class="inl"><label class="mut small">Gap →%</label><input class="inp nn" type="number" id="rpx" step="0.5" value="8"></span><span class="inl"><label class="mut small">Gap ↓%</label><input class="inp nn" type="number" id="rpy" step="0.5" value="0"></span><button class="tb wide" id="rpb">⧉ Repeat</button>
+            </div>
             <div class="pg" data-g="shape" data-t="shape" data-l="◆ Shape">
               <span id="srw" class="inl hide">${stepper('rdc', 'Corner')}</span>
               <b class="mut small" style="width:100%">✎ POINTS (বিন্দু টেনে নিজের মতো shape)</b>
@@ -266,13 +277,16 @@ export function mountStudio(root, skin, H, opts = {}) {
       inn.innerHTML = shapeSvg(l, (l.sw || 0) * l.w * W + 'px', 'g' + l.id);
     } else {
       el.style.width = l.w * 100 + '%'; el.style.height = '';
-      if (l.nar) { el.classList.add('fx'); el.style.aspectRatio = '1 / ' + l.nar * sy; } else { el.classList.remove('fx'); el.style.aspectRatio = ''; }
+      const kk = cropK(l.cr), pk = procKey(l), pc = pk && procCache.get(pk);
+      if (pk && !pc) ensureProc(l);
+      { const i0 = inn.querySelector('img'), ns = pc ? pc.url : l.url; if (i0 && i0.dataset.s !== ns) { i0.dataset.s = ns; i0.src = ns; } }
+      if (l.nar) { el.classList.add('fx'); el.style.aspectRatio = '1 / ' + (l.nar * (kk.kh / kk.kw)) * sy; } else { el.classList.remove('fx'); el.style.aspectRatio = ''; }
       inn.style.transform = fl < 0 || fv < 0 ? `scale(${fl},${fv})` : ''; inn.style.filter = shadowCss(l, W);
       const im0 = inn.querySelector('img'); if (im0) im0.style.filter = filt(l);
       let tn = inn.querySelector('.tn');
       if (l.tint) {
         if (!tn) { tn = document.createElement('i'); tn.className = 'tn'; inn.appendChild(tn); }
-        const u = `url("${String(l.url).replace(/"/g, '%22')}")`;
+        const u = `url("${String(pc ? pc.url : l.url).replace(/"/g, '%22')}")`;
         Object.assign(tn.style, { background: l.grad ? `linear-gradient(${(l.ang ?? 45) + 90}deg,${gradStops(l).join(',')})` : hexc(l.fill, '#00e5ff'), opacity: l.tna ?? 1, webkitMaskImage: u, maskImage: u });
       } else if (tn) tn.remove();
     }
@@ -304,7 +318,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       if (l.t === 'img') {
         const im = el.querySelector('img'), id = l.id;
         im.onload = () => { const L = layers.find((x) => x.id === id); if (L && im.naturalWidth && !L.nar) { L.nar = im.naturalHeight / im.naturalWidth; const e2 = elOf(id); e2 && place(e2, L); } };
-        im.src = l.url;
+        im.dataset.s = l.url; im.src = l.url;
       }
       el.onpointerdown = (e) => down(e, l.id, 'move');
       el.querySelector('.hs').onpointerdown = (e) => down(e, l.id, 'scale');
@@ -446,7 +460,92 @@ export function mountStudio(root, skin, H, opts = {}) {
     mutate(() => { l.pts.splice(selNode >= 0 && selNode < l.pts.length ? selNode : l.pts.length - 1, 1); selNode = -1; });
   };
   q$('#syr').onclick = () => { const l = cur(); if (l) mutate(() => { l.sy = 1; }); };
-  q$('#crB').onclick = () => { const l = cur(); l && l.local && editLocal(l, 'crop'); };
+
+  /* ---------- Phase 12: crop / auto-BG / mask (সব ছবিতে, preview ও export একই pipeline) ---------- */
+  const procCache = new Map(), procBusy = new Set(), procTimer = new Map(); let procWarned = false;
+  const procKey = (l) => (l.t === 'img' && (l.cr || l.bgt || l.mk) ? l.url + '|' + JSON.stringify([l.cr || 0, l.bgt || 0, l.bgs ?? 1, l.bge || 0, l.mk || '']) : '');
+  const cropK = (cr) => { const c = cr || [0, 0, 0, 0]; return { kw: Math.max(0.02, 1 - c[0] - c[2]), kh: Math.max(0.02, 1 - c[1] - c[3]) }; };
+  function procApply(src, sw, sh, l, maxDim) {
+    const cr = l.cr || [0, 0, 0, 0], { kw, kh } = cropK(l.cr), cw = Math.max(1, kw * sw), ch = Math.max(1, kh * sh), k = maxDim ? Math.min(1, maxDim / Math.max(cw, ch)) : 1;
+    const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(cw * k)); c.height = Math.max(1, Math.round(ch * k));
+    c.getContext('2d').drawImage(src, cr[0] * sw, cr[1] * sh, cw, ch, 0, 0, c.width, c.height);
+    if (l.bgt) autoBgCanvas(c, { tol: l.bgt, smooth: l.bgs ?? 1, shift: l.bge || 0 });
+    if (l.mk) maskCanvas(c, l.mk);
+    return c;
+  }
+  function refreshProc(key) { layers.forEach((l) => { if (procKey(l) === key) { const e = elOf(l.id); e && place(e, l); } }); const c = cur(); if (c && procKey(c) === key && tab === 'layers') panel(); }
+  function ensureProc(l) {
+    const key = procKey(l); if (!key || procCache.has(key) || procBusy.has(key)) return;
+    clearTimeout(procTimer.get(l.id));
+    procTimer.set(l.id, setTimeout(() => {
+      if (procKey(l) !== key || procCache.has(key) || procBusy.has(key)) return;
+      procBusy.add(key);
+      const im = new Image(); im.crossOrigin = 'anonymous';
+      const fail = () => { procBusy.delete(key); if (!procWarned) { procWarned = true; toast('Preview তে এই ইফেক্ট দেখানো যায়নি — Export এ ঠিকই লাগবে', 'err'); } };
+      im.onload = () => {
+        try {
+          const c = procApply(im, im.naturalWidth, im.naturalHeight, l, 900);
+          c.toBlob((b) => { if (!b) return fail(); procCache.set(key, { url: URL.createObjectURL(b) }); procBusy.delete(key); if (procCache.size > 60) { const k0 = procCache.keys().next().value; URL.revokeObjectURL(procCache.get(k0).url); procCache.delete(k0); } refreshProc(key); }, 'image/png');
+        } catch (e) { fail(); }
+      };
+      im.onerror = fail; im.src = l.url;
+    }, 140));
+  }
+  // crop বদলালে ছবির সাইজ/জায়গা এমনভাবে ঠিক রাখে যাতে বাকি অংশ যেখানে ছিল সেখানেই থাকে
+  function applyCrop(l, ncr) {
+    const o = cropK(l.cr), n = cropK(ncr), oc = l.cr || [0, 0, 0, 0], nc = ncr || [0, 0, 0, 0];
+    const R = stg.clientHeight / stg.clientWidth || 1, nar = l.nar || 1, sy = l.sy || 1;
+    const dxs = (nc[0] + (1 - nc[2])) / 2 - (oc[0] + (1 - oc[2])) / 2, dys = (nc[1] + (1 - nc[3])) / 2 - (oc[1] + (1 - oc[3])) / 2;
+    const bw = l.w, bh = l.w * nar * (o.kh / o.kw) * sy / R;
+    let dx = (dxs / o.kw) * bw * (l.flip ? -1 : 1), dy = (dys / o.kh) * bh * (l.flv ? -1 : 1);
+    const th = ((l.rot || 0) * Math.PI) / 180, co = Math.cos(th), si = Math.sin(th);
+    const rx = dx * co - dy * R * si, ry = (dx * si + dy * R * co) / R;
+    l.w = clamp(l.w * (n.kw / o.kw), 0.02, 3); l.x += rx; l.y += ry;
+    if (ncr && ncr.some((v) => v > 0.001)) l.cr = ncr.map((v) => Math.round(v * 1e4) / 1e4); else delete l.cr;
+  }
+  q$('#crB').onclick = async () => {
+    const l = cur(); if (!l || l.t !== 'img') return;
+    const cr = await cropDialog(modal, l.url, l.cr || null);
+    if (cr) mutate(() => applyCrop(l, cr));
+  };
+  q$('#crR').onclick = () => { const l = cur(); l && l.cr && mutate(() => applyCrop(l, null)); };
+  q$('#bgo').onchange = (e) => { const l = cur(); l && l.t === 'img' && mutate(() => { l.bgt = e.target.checked ? l.bgt || 28 : 0; }); };
+
+  /* ---------- Phase 12: Arrange (সংখ্যা, align, mirror, repeat) ---------- */
+  const NUMF = {
+    '#nx': { g: (l) => l.x * 100, s: (l, v) => { l.x = clamp(v / 100, -0.5, 1.5); } },
+    '#ny': { g: (l) => l.y * 100, s: (l, v) => { l.y = clamp(v / 100, -0.5, 1.5); } },
+    '#nw': { g: (l) => (l.t === 'text' ? l.fs : l.w) * 100, s: (l, v) => { if (l.t === 'text') l.fs = clamp(v / 100, 0.015, 0.6); else l.w = clamp(v / 100, 0.02, 3); } },
+    '#nh': { g: (l) => (l.sy || 1) * 100, s: (l, v) => { l.sy = clamp(v / 100, 0.2, 4); } },
+    '#nr': { g: (l) => l.rot || 0, s: (l, v) => { l.rot = clamp(v, -3600, 3600); } },
+  };
+  Object.entries(NUMF).forEach(([id, f]) => {
+    const el = q$(id);
+    el.oninput = () => { const l = cur(); if (!l || el.value === '' || !Number.isFinite(+el.value)) return; live(() => f.s(l, +el.value)); };
+    el.onchange = endLive;
+  });
+  qa('[data-al]').forEach((b) => (b.onclick = () => {
+    const l = cur(), el = l && elOf(l.id); if (!l || !el) return;
+    const r = el.getBoundingClientRect(), sr = stg.getBoundingClientRect(), hw = r.width / 2 / sr.width, hh = r.height / 2 / sr.height, a = b.dataset.al;
+    mutate(() => {
+      if (a === 'l') l.x = hw; else if (a === 'r') l.x = 1 - hw; else if (a === 'ch') l.x = 0.5;
+      else if (a === 't') l.y = hh; else if (a === 'b') l.y = 1 - hh; else if (a === 'cv') l.y = 0.5;
+      else { l.x = 0.5; l.y = 0.5; }
+    });
+  }));
+  q$('#mir').onclick = () => {
+    const l = cur(); if (!l) return;
+    if (layers.length >= 80) return toast('সর্বোচ্চ ৮০টি layer', 'err');
+    mutate(() => { const m = dupMany([l]), c = layers.find((z) => z.id === m[l.id]); c.x = clamp(1 - l.x, -0.5, 1.5); c.y = l.y; c.flip = !l.flip; c.rot = -(l.rot || 0); delete c.gid; sel = c.id; });
+    toast('🪞 উল্টো পাশে কপি হয়েছে');
+  };
+  q$('#rpb').onclick = () => {
+    const l = cur(); if (!l) return;
+    const n = clamp(Math.floor(+q$('#rpn').value) || 2, 2, 20), dx = (+q$('#rpx').value || 0) / 100, dy = (+q$('#rpy').value || 0) / 100;
+    if (layers.length + n - 1 > 80) return toast('সর্বোচ্চ ৮০টি layer — কম copy দিন', 'err');
+    mutate(() => { let last = l.id; for (let i = 1; i < n; i++) { const m = dupMany([l]), c = layers.find((z) => z.id === m[l.id]); c.x = l.x + dx * i; c.y = l.y + dy * i; delete c.gid; last = c.id; } sel = last; });
+    toast(`⧉ ${n - 1}টি copy হয়েছে`);
+  };
   q$('#bgB').onclick = () => { const l = cur(); l && l.local && editLocal(l, 'bg'); };
   q$('#rr').onclick = () => { const l = cur(); if (l && l.t === 'img') mutate(() => { l.hue = 0; l.sat = 1; l.bri = 1; }); };
   let pg = '';
@@ -457,7 +556,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     stud.dataset.sel = l ? '1' : '';
     if (!l) return;
     qa('[data-t]', pr).forEach((e) => e.classList.toggle('hide', !e.dataset.t.split(' ').includes(l.t)));
-    const gs = qa('.pg', pr).filter((g) => !g.classList.contains('hide') && !(g.dataset.g === 'crop' && !l.local));
+    const gs = qa('.pg', pr).filter((g) => !g.classList.contains('hide'));
     if (!gs.some((g) => g.dataset.g === pg)) pg = (gs.find((g) => g.dataset.g === DEFG[l.t]) || gs[0]).dataset.g;
     const lab = (g) => { const d = g.dataset.l; if (!d.includes(':')) return d; const m = Object.fromEntries(d.split('|').map((x) => x.split(':'))); return m[l.t] || d; };
     q$('#pchips').innerHTML = gs.map((g) => `<button class="pc2 ${g.dataset.g === pg ? 'on' : ''}" data-pg="${g.dataset.g}">${lab(g)}</button>`).join('');
@@ -473,6 +572,8 @@ export function mountStudio(root, skin, H, opts = {}) {
         const el = q$(id), v = l[k] ?? DEF[k] ?? '';
         if (kind === 'b') el.checked = !!v; else if (document.activeElement !== el) el.value = v;
       });
+      Object.entries(NUMF).forEach(([id, f]) => { const e = q$(id); if (document.activeElement !== e) e.value = Math.round(f.g(l) * 10) / 10; });
+      q$('#bgo').checked = !!l.bgt; q$('#bgB').classList.toggle('hide', !l.local); q$('#crR').classList.toggle('hide', !l.cr);
       q$('#sgw').classList.toggle('hide', !l.grad);
       q$('#sf3').classList.toggle('hide', !l.g3);
       if (t === 'shape' || t === 'text') q$('#bdc .sv').textContent = STEP.bdc.get(l);
@@ -941,7 +1042,8 @@ export function mountStudio(root, skin, H, opts = {}) {
         }
         if (l.t === 'img') {
           const b0 = l.local ? lbm[l.id] : map[l.aid]; if (!b0) { x.restore(); continue; }
-          const b1 = filt(l) ? recolor(b0, l) : b0, b = l.tint ? tintCv(b1, l) : b1, w = l.w * W, h = w * (b0.height / b0.width) * sy;
+          const pb = l.cr || l.bgt || l.mk ? procApply(b0, b0.width, b0.height, l, l.bgt ? 2400 : 0) : b0;
+          const b1 = filt(l) ? recolor(pb, l) : pb, b = l.tint ? tintCv(b1, l) : b1, w = l.w * W, h = w * (pb.height / pb.width) * sy;
           x.scale(l.flip ? -1 : 1, l.flv ? -1 : 1);
           x.drawImage(b, -w / 2, -h / 2, w, h);
         } else if (l.t === 'shape') {
@@ -974,6 +1076,11 @@ export function mountStudio(root, skin, H, opts = {}) {
   const num = (v, d, a, b) => (Number.isFinite(+v) ? clamp(+v, a, b) : d);
   const col = (v, d) => (/^#[0-9a-f]{3,8}$/i.test(String(v)) ? String(v) : d);
   // ফাইল/template/draft থেকে আসা layer নিরাপদ করে তোলে; asset না থাকলে বাদ
+  const procFields = (l) => ({
+    ...(Array.isArray(l.cr) && l.cr.length === 4 && l.cr.every((v) => Number.isFinite(+v)) ? { cr: l.cr.map((v) => num(v, 0, 0, 0.95)) } : {}),
+    ...(l.bgt ? { bgt: num(l.bgt, 28, 5, 80), bgs: num(l.bgs, 1, 0, 4), bge: num(l.bge, 0, -5, 5) } : {}),
+    ...(MASKS.some((m) => m[0] && m[0] === l.mk) ? { mk: l.mk } : {}),
+  });
   function hydrate(list) {
     let missing = 0, localSkip = 0;
     const out = [];
@@ -990,7 +1097,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       if (l.t === 'img') {
         const a = assetOf(String(l.aid));
         if (!a) { missing++; return; }
-        out.push({ ...base, t: 'img', aid: a.id, url: a.preview, name: a.name, w: num(l.w, 0.3, 0.03, 3), hue: num(l.hue, 0, -180, 180), sat: num(l.sat, 1, 0, 2), bri: num(l.bri, 1, 0.3, 1.7), ...(l.tint ? { tint: true, tna: num(l.tna, 1, 0.1, 1), fill: col(l.fill, '#00e5ff') } : {}), ...(l.grad ? { grad: true, ang: num(l.ang, 45, 0, 360), fill2: col(l.fill2, '#8b5cf6'), g3: !!l.g3, fill3: col(l.fill3, '#ff2e93') } : {}) });
+        out.push({ ...base, t: 'img', aid: a.id, url: a.preview, name: a.name, w: num(l.w, 0.3, 0.03, 3), hue: num(l.hue, 0, -180, 180), sat: num(l.sat, 1, 0, 2), bri: num(l.bri, 1, 0.3, 1.7), ...(l.tint ? { tint: true, tna: num(l.tna, 1, 0.1, 1), fill: col(l.fill, '#00e5ff') } : {}), ...(l.grad ? { grad: true, ang: num(l.ang, 45, 0, 360), fill2: col(l.fill2, '#8b5cf6'), g3: !!l.g3, fill3: col(l.fill3, '#ff2e93') } : {}), ...procFields(l) });
       } else if (l.t === 'text') {
         out.push({ ...base, t: 'text', text: String(l.text || '').slice(0, 60), font: String(l.font || fonts()[0]).slice(0, 60), color: col(l.color, '#ffffff'), stroke: col(l.stroke, '#000000'), strokeW: num(l.strokeW, 0.08, 0, 0.6), fs: num(l.fs, 0.08, 0.015, 0.6), ...(l.grad ? { grad: true, ang: num(l.ang, 45, 0, 360), fill2: col(l.fill2, '#8b5cf6'), g3: !!l.g3, fill3: col(l.fill3, '#ff2e93') } : {}) });
       } else if (l.t === 'shape') {
@@ -1004,7 +1111,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   }
   const common = (l) => ({ x: l.x, y: l.y, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1, sy: l.sy || 1, ...(l.hid ? { hid: true } : {}), ...(l.lock ? { lock: true } : {}), ...(l.flv ? { flv: true } : {}), ...(l.bm && l.bm !== 'normal' ? { bm: l.bm } : {}), ...(l.gid ? { gid: l.gid } : {}), ...(l.shadow ? { shadow: true, shc: l.shc || '#000000', shb: l.shb ?? 0.03, shx: l.shx || 0, shy: l.shy || 0 } : {}) });
   const clean = () => layers.filter((l) => !l.local).map((l) => (l.t === 'img'
-    ? { t: 'img', aid: l.aid, w: l.w, hue: l.hue || 0, sat: l.sat ?? 1, bri: l.bri ?? 1, ...(l.tint ? { tint: true, tna: l.tna ?? 1, fill: l.fill || '#00e5ff' } : {}), ...(l.grad ? { grad: true, ang: l.ang ?? 45, fill2: l.fill2 || '#8b5cf6', g3: !!l.g3, fill3: l.fill3 || '#ff2e93' } : {}), ...common(l) }
+    ? { t: 'img', aid: l.aid, w: l.w, hue: l.hue || 0, sat: l.sat ?? 1, bri: l.bri ?? 1, ...(l.tint ? { tint: true, tna: l.tna ?? 1, fill: l.fill || '#00e5ff' } : {}), ...(l.grad ? { grad: true, ang: l.ang ?? 45, fill2: l.fill2 || '#8b5cf6', g3: !!l.g3, fill3: l.fill3 || '#ff2e93' } : {}), ...procFields(l), ...common(l) }
     : l.t === 'shape'
       ? { t: 'shape', k: l.k, ...(l.k === 'custom' ? { pts: l.pts, sm: !!l.sm } : {}), fill: l.fill, fill2: l.fill2, fill3: l.fill3 || '#ff2e93', g3: !!l.g3, grad: !!l.grad, ang: l.ang ?? 45, stroke: l.stroke, sw: l.sw || 0, rad: l.rad || 0, shadow: !!l.shadow, w: l.w, ...common(l) }
       : { t: 'text', text: l.text, font: l.font, color: l.color, stroke: l.stroke, strokeW: l.strokeW, fs: l.fs, ...(l.grad ? { grad: true, ang: l.ang ?? 45, fill2: l.fill2 || '#8b5cf6', g3: !!l.g3, fill3: l.fill3 || '#ff2e93' } : {}), ...common(l) }));
@@ -1059,6 +1166,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       window.removeEventListener('resize', onRes);
       layers.forEach((l) => l.local && l.url && URL.revokeObjectURL(l.url));
       locals.forEach((_, u) => URL.revokeObjectURL(u)); locals.clear();
+      procCache.forEach((v) => URL.revokeObjectURL(v.url)); procCache.clear();
     },
   };
 }
