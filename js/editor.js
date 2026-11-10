@@ -130,11 +130,31 @@ function recolor(bmp, l) {
   return c;
 }
 const DEF_W = { banner: 0.6, shape: 0.25, name: 0.5, accessory: 0.3, sticker: 0.2, pattern: 1, logo: 0.2 };
-const DEF = { op: 1, sy: 1, hue: 0, sat: 1, bri: 1, ang: 45, sw: 0, rad: 0, grad: false, shadow: false, fill: '#00e5ff', fill2: '#8b5cf6', fill3: '#ff2e93', g3: false, stroke: '#000000', bm: 'normal', shc: '#000000', shb: 0.03, shx: 0, shy: 0, tna: 1, tint: false, bgt: 28, bgs: 1, bge: 0, mk: '' };
+const _mc = document.createElement('canvas').getContext('2d');
+// বাঁকা লেখা: প্রতিটি অক্ষর বৃত্তের চাপ বরাবর বসে (DOM ও Export একই হিসাব ব্যবহার করে)
+export function curveLay(text, fs, font, c) {
+  _mc.font = `800 ${fs}px "${font}", sans-serif`;
+  const ch = [...String(text)], ws = ch.map((g) => _mc.measureText(g).width), Wt = ws.reduce((a, b) => a + b, 0) || 1;
+  const r = Wt / ((c / 100) * Math.PI * 1.5); let s = -Wt / 2; const out = [];
+  ch.forEach((g, i) => { const m = s + ws[i] / 2; s += ws[i]; const p = m / r; out.push({ g, x: r * Math.sin(p), y: r * (1 - Math.cos(p)), rot: (p * 180) / Math.PI, w: ws[i] }); });
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  out.forEach((o) => { const a = (o.rot * Math.PI) / 180, ca = Math.abs(Math.cos(a)), sa = Math.abs(Math.sin(a)), hw = (o.w / 2) * ca + fs * 0.55 * sa, hh = fs * 0.55 * ca + (o.w / 2) * sa; x0 = Math.min(x0, o.x - hw); x1 = Math.max(x1, o.x + hw); y0 = Math.min(y0, o.y - hh); y1 = Math.max(y1, o.y + hh); });
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  out.forEach((o) => { o.x -= cx; o.y -= cy; });
+  return { chars: out, w: Math.max(1, x1 - x0), h: Math.max(fs * 1.1, y1 - y0) };
+}
+// Style presets: [নাম, রং১, রং২(বা null), outline রং, outline মোটা, shadow/glow রং, glow?]
+export const PRESETS = [
+  ['Neon', '#00e5ff', '#ff2e93', '#001018', 0.06, '#00e5ff', 1], ['Fire', '#ffe259', '#ff3b00', '#3a0a00', 0.08, '#ff6a00', 1], ['Gold', '#fff1a8', '#d4a017', '#4a3200', 0.08, '#000000', 0],
+  ['Chrome', '#ffffff', '#8a95a5', '#1a1f2b', 0.07, '#000000', 0], ['Ice', '#e0faff', '#3ba7ff', '#05304d', 0.07, '#3ba7ff', 1], ['Racing', '#ffffff', null, '#e10600', 0.14, '#000000', 0],
+  ['Retro', '#ffd23f', '#ff2e93', '#2b0a4a', 0.1, '#8b5cf6', 0], ['Candy', '#ff9ad5', '#ffd6a5', '#ffffff', 0.1, '#ff2e93', 0], ['Bold', '#ffcc00', null, '#000000', 0.16, '#000000', 0],
+  ['Clean', '#ffffff', null, '#000000', 0.06, null, 0], ['Dark', '#111111', null, '#ffffff', 0.1, null, 0], ['Glow', '#ffffff', null, '#000000', 0, '#ffffff', 1],
+];
+const DEF = { op: 1, sy: 1, hue: 0, sat: 1, bri: 1, ang: 45, sw: 0, rad: 0, cv: 0, grad: false, shadow: false, fill: '#00e5ff', fill2: '#8b5cf6', fill3: '#ff2e93', g3: false, stroke: '#000000', bm: 'normal', shc: '#000000', shb: 0.03, shx: 0, shy: 0, tna: 1, tint: false, bgt: 28, bgs: 1, bge: 0, mk: '' };
 // [selector, layer key, allowed types (null = সব), kind: n=number s=string b=bool]
 const BIND = [
   ['#op', 'op', null, 'n'], ['#sy', 'sy', null, 'n'], ['#bm', 'bm', null, 's'],
-  ['#tt', 'text', ['text'], 's'], ['#tf', 'font', ['text'], 's'], ['#tc', 'color', ['text'], 's'], ['#ts', 'stroke', ['text'], 's'], 
+  ['#tt', 'text', ['text'], 's'], ['#tf', 'font', ['text'], 's'], ['#tc', 'color', ['text'], 's'], ['#tcv', 'cv', ['text'], 'n'], ['#ts', 'stroke', ['text'], 's'], 
   ['#rh', 'hue', ['img'], 'n'], ['#rs', 'sat', ['img'], 'n'], ['#rb', 'bri', ['img'], 'n'],
   ['#sf', 'fill', ['shape', 'img'], 's'], ['#sg', 'grad', ['shape', 'text', 'img'], 'b'], ['#sf2', 'fill2', ['shape', 'text', 'img'], 's'], ['#sg3', 'g3', ['shape', 'text', 'img'], 'b'], ['#sf3', 'fill3', ['shape', 'text', 'img'], 's'], ['#sa', 'ang', ['shape', 'text', 'img'], 'n'],
   ['#bgt', 'bgt', ['img'], 'n'], ['#bgs', 'bgs', ['img'], 'n'], ['#bge', 'bge', ['img'], 'n'], ['#mk', 'mk', ['img'], 's'], ['#tn', 'tint', ['img'], 'b'], ['#tna', 'tna', ['img'], 'n'],
@@ -183,7 +203,8 @@ export function mountStudio(root, skin, H, opts = {}) {
         <div class="card props hide" id="props">
           <div class="pchips" id="pchips"></div>
           <div class="psec">
-            <div class="pg" data-g="text" data-t="text" data-l="✏ Text"><input class="inp" id="tt" placeholder="লেখা…" maxlength="40"><select class="inp" id="tf"></select></div>
+            <div class="pg" data-g="text" data-t="text" data-l="✏ Text"><input class="inp" id="tt" placeholder="লেখা…" maxlength="40"><select class="inp" id="tf"></select><label class="mut small">Curve (বাঁকা লেখা)</label><input type="range" id="tcv" min="-100" max="100" step="1"></div>
+            <div class="pg" data-g="pre" data-t="text shape img" data-l="🎭 Style"><p class="mut small" style="width:100%">এক ক্লিকে রেডি স্টাইল (রং + outline + shadow)</p><div class="pstl" id="pstl"></div></div>
             <div class="pg" data-g="fill" data-t="text shape img" data-l="text:🎨 Color|shape:🎨 Fill|img:🌈 Tint">
               <span class="inl" data-t="img"><label class="chk mut small"><input type="checkbox" id="tn"> Tint ON (ছবির উপর রং)</label><label class="mut small">Amount</label><input type="range" id="tna" min="0.1" max="1" step="0.05"></span>
               <span class="inl" data-t="text"><label class="mut small">Color</label><input class="inp" type="color" id="tc"></span>
@@ -228,6 +249,8 @@ export function mountStudio(root, skin, H, opts = {}) {
   base.onload = () => { stg.style.aspectRatio = base.naturalWidth + ' / ' + base.naturalHeight; applyZ(); layers.forEach((l) => { const el = elOf(l.id); el && place(el, l); }); };
   q$('#tf').innerHTML = fonts().map((f) => `<option>${esc(f)}</option>`).join('');
   fonts().forEach(H.ensureFont);
+  const onFontsDone = () => layers.forEach((l) => { if (l.t === 'text' && l.cv) { const e = elOf(l.id); e && place(e, l); } });
+  document.fonts && document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', onFontsDone);
 
   /* ---------- zoom / pan ---------- */
   function applyZ() {
@@ -263,13 +286,23 @@ export function mountStudio(root, skin, H, opts = {}) {
     el.classList.toggle('tl', l.t === 'text');
     if (l.t === 'text') {
       el.classList.remove('fx'); el.style.width = 'auto'; el.style.aspectRatio = '';
-      const fs = l.fs * W;
+      const fs = l.fs * W, lay = l.cv ? curveLay(l.text, fs, l.font, l.cv) : null;
+      if (lay) {
+        el.style.width = lay.w + 'px'; el.style.height = lay.h * sy + 'px';
+        Object.assign(inn.style, { width: lay.w + 'px', height: lay.h + 'px', fontSize: '', fontFamily: '', color: '', fontWeight: '', webkitTextStroke: '0', paintOrder: '', background: '', webkitBackgroundClip: '', backgroundClip: '', webkitTextFillColor: '', transform: `scale(${fl},${sy * fv})`, filter: shadowCss(l, W) });
+        const gid = 'cg' + l.id, a = ((l.ang ?? 45) * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
+        const gd = l.grad ? `<defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="${(-ca * lay.w) / 2}" y1="${(-sa * lay.h) / 2}" x2="${(ca * lay.w) / 2}" y2="${(sa * lay.h) / 2}">${gradStops(l).map((cl, i, ar) => `<stop offset="${i / (ar.length - 1)}" stop-color="${cl}"/>`).join('')}</linearGradient></defs>` : '';
+        inn.innerHTML = `<svg width="${lay.w}" height="${lay.h}" viewBox="${-lay.w / 2} ${-lay.h / 2} ${lay.w} ${lay.h}" style="display:block;overflow:visible">${gd}${lay.chars.filter((o) => o.g.trim()).map((o) => `<text transform="translate(${o.x} ${o.y}) rotate(${o.rot})" text-anchor="middle" dominant-baseline="central" font-family="${esc(l.font)},sans-serif" font-size="${fs}" font-weight="800" fill="${l.grad ? `url(#${gid})` : hexc(l.color, '#ffffff')}" ${l.strokeW > 0 ? `stroke="${hexc(l.stroke, '#000000')}" stroke-width="${l.strokeW * fs}" stroke-linejoin="round" paint-order="stroke"` : ''}>${esc(o.g)}</text>`).join('')}</svg>`;
+        el.style.aspectRatio = '';
+      } else {
+      inn.style.width = ''; inn.style.height = ''; el.style.width = 'auto';
       el.style.height = fs * 1.1 * sy + 'px';
       Object.assign(inn.style, { fontSize: fs + 'px', fontFamily: `"${l.font}",sans-serif`, color: l.color, fontWeight: 800, webkitTextStroke: l.strokeW > 0 ? l.strokeW * fs + 'px ' + l.stroke : '0', paintOrder: 'stroke fill', transform: `scale(${fl},${sy * fv})` });
       if (l.grad) Object.assign(inn.style, { background: `linear-gradient(${(l.ang ?? 45) + 90}deg,${gradStops(l).join(',')})`, webkitBackgroundClip: 'text', backgroundClip: 'text', webkitTextFillColor: 'transparent' });
       else Object.assign(inn.style, { background: '', webkitBackgroundClip: '', backgroundClip: '', webkitTextFillColor: '' });
       inn.style.filter = shadowCss(l, W);
       inn.textContent = l.text;
+      }
     } else if (l.t === 'shape') {
       el.classList.add('fx'); el.style.width = l.w * 100 + '%'; el.style.height = ''; el.style.aspectRatio = '1 / ' + sy;
       inn.style.transform = fl < 0 || fv < 0 ? `scale(${fl},${fv})` : '';
@@ -547,6 +580,16 @@ export function mountStudio(root, skin, H, opts = {}) {
     toast(`⧉ ${n - 1}টি copy হয়েছে`);
   };
   q$('#bgB').onclick = () => { const l = cur(); l && l.local && editLocal(l, 'bg'); };
+  q$('#pstl').innerHTML = PRESETS.map((p, i) => `<button class="pst" data-p="${i}" title="${p[0]}" style="background:${p[2] ? `linear-gradient(135deg,${p[1]},${p[2]})` : p[1]};color:${p[2] ? '#fff' : p[1] === '#ffffff' || p[1] === '#ffcc00' ? '#222' : '#fff'}">${p[0]}</button>`).join('');
+  q$('#pstl').onclick = (e) => {
+    const b = e.target.closest('[data-p]'), l = cur(); if (!b || !l) return;
+    const [, a, c, st, sw, sh, gl] = PRESETS[+b.dataset.p];
+    mutate(() => {
+      if (l.t === 'text') { l.color = a; l.grad = !!c; if (c) { l.fill2 = c; l.g3 = false; l.ang = 90; } l.stroke = st; l.strokeW = sw; }
+      else if (l.t === 'shape') { l.fill = a; l.grad = !!c; if (c) { l.fill2 = c; l.g3 = false; l.ang = 90; } l.stroke = st; l.sw = sw * 0.25; }
+      if (sh) { l.shadow = true; l.shc = sh; l.shb = gl ? 0.035 : 0.015; l.shx = 0; l.shy = gl ? 0 : 0.012; } else l.shadow = false;
+    });
+  };
   q$('#rr').onclick = () => { const l = cur(); if (l && l.t === 'img') mutate(() => { l.hue = 0; l.sat = 1; l.bri = 1; }); };
   let pg = '';
   const DEFG = { text: 'text', shape: 'fill', img: 'imgc' };
@@ -1052,6 +1095,21 @@ export function mountStudio(root, skin, H, opts = {}) {
         } else {
           const fs = l.fs * W;
           x.scale(l.flip ? -1 : 1, sy * (l.flv ? -1 : 1));
+          if (l.cv) {
+            const lay = curveLay(l.text, fs, l.font, l.cv), a = ((l.ang ?? 45) * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
+            x.font = `800 ${fs}px "${l.font}", sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
+            lay.chars.forEach((o) => {
+              if (!o.g.trim()) return;
+              const r = (o.rot * Math.PI) / 180; x.save(); x.translate(o.x, o.y); x.rotate(r);
+              if (l.strokeW > 0) { x.lineJoin = 'round'; x.lineWidth = fs * l.strokeW; x.strokeStyle = l.stroke; x.strokeText(o.g, 0, 0); }
+              if (l.grad) {
+                const lp = (px, py) => { const dx = px - o.x, dy = py - o.y; return [dx * Math.cos(-r) - dy * Math.sin(-r), dx * Math.sin(-r) + dy * Math.cos(-r)]; };
+                const p1 = lp((-ca * lay.w) / 2, (-sa * lay.h) / 2), p2 = lp((ca * lay.w) / 2, (sa * lay.h) / 2), g = x.createLinearGradient(p1[0], p1[1], p2[0], p2[1]);
+                gradStops(l).forEach((cl, i, ar) => g.addColorStop(i / (ar.length - 1), cl)); x.fillStyle = g;
+              } else x.fillStyle = l.color;
+              x.fillText(o.g, 0, 0); x.restore();
+            });
+          } else {
           x.font = `800 ${fs}px "${l.font}", sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
           if (l.strokeW > 0) { x.lineJoin = 'round'; x.lineWidth = fs * l.strokeW; x.strokeStyle = l.stroke; x.strokeText(l.text, 0, 0); x.shadowColor = 'transparent'; }
           if (l.grad) {
@@ -1060,6 +1118,7 @@ export function mountStudio(root, skin, H, opts = {}) {
             x.fillStyle = g;
           } else x.fillStyle = l.color;
           x.fillText(l.text, 0, 0);
+          }
         }
         x.restore();
       }
@@ -1099,7 +1158,7 @@ export function mountStudio(root, skin, H, opts = {}) {
         if (!a) { missing++; return; }
         out.push({ ...base, t: 'img', aid: a.id, url: a.preview, name: a.name, w: num(l.w, 0.3, 0.03, 3), hue: num(l.hue, 0, -180, 180), sat: num(l.sat, 1, 0, 2), bri: num(l.bri, 1, 0.3, 1.7), ...(l.tint ? { tint: true, tna: num(l.tna, 1, 0.1, 1), fill: col(l.fill, '#00e5ff') } : {}), ...(l.grad ? { grad: true, ang: num(l.ang, 45, 0, 360), fill2: col(l.fill2, '#8b5cf6'), g3: !!l.g3, fill3: col(l.fill3, '#ff2e93') } : {}), ...procFields(l) });
       } else if (l.t === 'text') {
-        out.push({ ...base, t: 'text', text: String(l.text || '').slice(0, 60), font: String(l.font || fonts()[0]).slice(0, 60), color: col(l.color, '#ffffff'), stroke: col(l.stroke, '#000000'), strokeW: num(l.strokeW, 0.08, 0, 0.6), fs: num(l.fs, 0.08, 0.015, 0.6), ...(l.grad ? { grad: true, ang: num(l.ang, 45, 0, 360), fill2: col(l.fill2, '#8b5cf6'), g3: !!l.g3, fill3: col(l.fill3, '#ff2e93') } : {}) });
+        out.push({ ...base, t: 'text', text: String(l.text || '').slice(0, 60), font: String(l.font || fonts()[0]).slice(0, 60), color: col(l.color, '#ffffff'), stroke: col(l.stroke, '#000000'), strokeW: num(l.strokeW, 0.08, 0, 0.6), fs: num(l.fs, 0.08, 0.015, 0.6), ...(l.cv ? { cv: num(l.cv, 0, -100, 100) } : {}), ...(l.grad ? { grad: true, ang: num(l.ang, 45, 0, 360), fill2: col(l.fill2, '#8b5cf6'), g3: !!l.g3, fill3: col(l.fill3, '#ff2e93') } : {}) });
       } else if (l.t === 'shape') {
         out.push({ ...base, t: 'shape', k: SHAPES.some((s) => s[0] === l.k) || (l.k === 'custom' && Array.isArray(l.pts) && l.pts.length >= 3) ? l.k : 'rect',
           ...(l.k === 'custom' && Array.isArray(l.pts) && l.pts.length >= 3 ? { pts: l.pts.slice(0, 40).map((q) => [num(q && q[0], 50, -30, 130), num(q && q[1], 50, -30, 130)]), sm: !!l.sm } : {}), fill: col(l.fill, '#00e5ff'), fill2: col(l.fill2, '#8b5cf6'), fill3: col(l.fill3, '#ff2e93'), g3: !!l.g3, grad: !!l.grad, ang: num(l.ang, 45, 0, 360), stroke: col(l.stroke, '#000000'), sw: num(l.sw, 0, 0, 1), rad: num(l.rad, 0, 0, 0.5), shadow: !!l.shadow, w: num(l.w, 0.25, 0.03, 3) });
@@ -1114,7 +1173,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     ? { t: 'img', aid: l.aid, w: l.w, hue: l.hue || 0, sat: l.sat ?? 1, bri: l.bri ?? 1, ...(l.tint ? { tint: true, tna: l.tna ?? 1, fill: l.fill || '#00e5ff' } : {}), ...(l.grad ? { grad: true, ang: l.ang ?? 45, fill2: l.fill2 || '#8b5cf6', g3: !!l.g3, fill3: l.fill3 || '#ff2e93' } : {}), ...procFields(l), ...common(l) }
     : l.t === 'shape'
       ? { t: 'shape', k: l.k, ...(l.k === 'custom' ? { pts: l.pts, sm: !!l.sm } : {}), fill: l.fill, fill2: l.fill2, fill3: l.fill3 || '#ff2e93', g3: !!l.g3, grad: !!l.grad, ang: l.ang ?? 45, stroke: l.stroke, sw: l.sw || 0, rad: l.rad || 0, shadow: !!l.shadow, w: l.w, ...common(l) }
-      : { t: 'text', text: l.text, font: l.font, color: l.color, stroke: l.stroke, strokeW: l.strokeW, fs: l.fs, ...(l.grad ? { grad: true, ang: l.ang ?? 45, fill2: l.fill2 || '#8b5cf6', g3: !!l.g3, fill3: l.fill3 || '#ff2e93' } : {}), ...common(l) }));
+      : { t: 'text', text: l.text, font: l.font, color: l.color, stroke: l.stroke, strokeW: l.strokeW, fs: l.fs, ...(l.cv ? { cv: l.cv } : {}), ...(l.grad ? { grad: true, ang: l.ang ?? 45, fill2: l.fill2 || '#8b5cf6', g3: !!l.g3, fill3: l.fill3 || '#ff2e93' } : {}), ...common(l) }));
   function saveFile() {
     if (layers.some((l) => l.local)) toast('নিজের ছবিগুলো ফাইলে সেভ হবে না (শুধু Export এ আসে)', 'err');
     const blob = new Blob([JSON.stringify({ app: 'bussid-studio', v: 2, skinId: skin.id, tpl: tplId, bi: bIdx(), layers: clean() })], { type: 'application/json' });
@@ -1164,6 +1223,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       window.removeEventListener('pointercancel', onUp);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', onRes);
+      document.fonts && document.fonts.removeEventListener && document.fonts.removeEventListener('loadingdone', onFontsDone);
       layers.forEach((l) => l.local && l.url && URL.revokeObjectURL(l.url));
       locals.forEach((_, u) => URL.revokeObjectURL(u)); locals.clear();
       procCache.forEach((v) => URL.revokeObjectURL(v.url)); procCache.clear();
