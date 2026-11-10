@@ -362,3 +362,7 @@ footer{border-top:1px solid var(--line);margin-top:50px;padding:30px 0;color:var
 .pstl{display:flex;flex-wrap:wrap;gap:6px;width:100%}
 .pst{padding:8px 12px;border-radius:10px;border:1px solid var(--line);font-weight:800;cursor:pointer;min-width:62px;text-shadow:0 1px 2px rgba(0,0,0,.55);font-family:inherit}
 .pst:active{transform:scale(.95)}
+
+/* ===== v13b: drag handle, versions ===== */
+.dgh{cursor:grab;touch-action:none;padding:0 6px;color:var(--mut,#8a93b8);font-size:18px;line-height:1;user-select:none}
+.lrow.dragging{opacity:.5}.lrow.dt{outline:2px dashed var(--c1,#00e5ff)}

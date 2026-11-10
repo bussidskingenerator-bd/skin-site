@@ -81,8 +81,9 @@ export function shapeSvg(l, swCss, gid = 'g') {
   const a = ((Number.isFinite(+l.ang) ? +l.ang : 45) * Math.PI) / 180, c = Math.cos(a) * 50, s = Math.sin(a) * 50;
   const f1 = hexc(l.fill, '#00e5ff'), st = gradStops(l);
   const grad = l.grad ? `<defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="${(50 - c).toFixed(2)}" y1="${(50 - s).toFixed(2)}" x2="${(50 + c).toFixed(2)}" y2="${(50 + s).toFixed(2)}">${st.map((cl, i) => `<stop offset="${i / (st.length - 1)}" stop-color="${cl}"/>`).join('')}</linearGradient></defs>` : '';
+  const pat = patOn(l) ? patSvg('p' + gid, l, 100) : '';
   const sk = +l.sw > 0 ? ` stroke="${hexc(l.stroke, '#000000')}" stroke-linejoin="round" vector-effect="non-scaling-stroke" style="stroke-width:${swCss}"` : '';
-  return `<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:100%;display:block;overflow:visible">${grad}<path d="${shapeD(l)}" fill="${l.grad ? `url(#${gid})` : f1}" fill-rule="${l.k === 'ring' ? 'evenodd' : 'nonzero'}"${sk}/></svg>`;
+  return `<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:100%;display:block;overflow:visible">${grad}${pat ? `<defs>${pat}</defs>` : ''}<path d="${shapeD(l)}" fill="${pat ? `url(#p${gid})` : l.grad ? `url(#${gid})` : f1}" fill-rule="${l.k === 'ring' ? 'evenodd' : 'nonzero'}"${sk}/></svg>`;
 }
 
 /* ---------- Template / design mini preview (user + admin দুই জায়গাতেই) ---------- */
@@ -135,8 +136,8 @@ const _mc = document.createElement('canvas').getContext('2d');
 export function curveLay(text, fs, font, c) {
   _mc.font = `800 ${fs}px "${font}", sans-serif`;
   const ch = [...String(text)], ws = ch.map((g) => _mc.measureText(g).width), Wt = ws.reduce((a, b) => a + b, 0) || 1;
-  const r = Wt / ((c / 100) * Math.PI * 1.5); let s = -Wt / 2; const out = [];
-  ch.forEach((g, i) => { const m = s + ws[i] / 2; s += ws[i]; const p = m / r; out.push({ g, x: r * Math.sin(p), y: r * (1 - Math.cos(p)), rot: (p * 180) / Math.PI, w: ws[i] }); });
+  const r = c ? Wt / ((c / 100) * Math.PI * 1.5) : 0; let s = -Wt / 2; const out = [];
+  ch.forEach((g, i) => { const m = s + ws[i] / 2; s += ws[i]; if (!r) return out.push({ g, x: m, y: 0, rot: 0, w: ws[i] }); const p = m / r; out.push({ g, x: r * Math.sin(p), y: r * (1 - Math.cos(p)), rot: (p * 180) / Math.PI, w: ws[i] }); });
   let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
   out.forEach((o) => { const a = (o.rot * Math.PI) / 180, ca = Math.abs(Math.cos(a)), sa = Math.abs(Math.sin(a)), hw = (o.w / 2) * ca + fs * 0.55 * sa, hh = fs * 0.55 * ca + (o.w / 2) * sa; x0 = Math.min(x0, o.x - hw); x1 = Math.max(x1, o.x + hw); y0 = Math.min(y0, o.y - hh); y1 = Math.max(y1, o.y + hh); });
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
@@ -150,11 +151,31 @@ export const PRESETS = [
   ['Retro', '#ffd23f', '#ff2e93', '#2b0a4a', 0.1, '#8b5cf6', 0], ['Candy', '#ff9ad5', '#ffd6a5', '#ffffff', 0.1, '#ff2e93', 0], ['Bold', '#ffcc00', null, '#000000', 0.16, '#000000', 0],
   ['Clean', '#ffffff', null, '#000000', 0.06, null, 0], ['Dark', '#111111', null, '#ffffff', 0.1, null, 0], ['Glow', '#ffffff', null, '#000000', 0, '#ffffff', 1],
 ];
-const DEF = { op: 1, sy: 1, hue: 0, sat: 1, bri: 1, ang: 45, sw: 0, rad: 0, cv: 0, grad: false, shadow: false, fill: '#00e5ff', fill2: '#8b5cf6', fill3: '#ff2e93', g3: false, stroke: '#000000', bm: 'normal', shc: '#000000', shb: 0.03, shx: 0, shy: 0, tna: 1, tint: false, bgt: 28, bgs: 1, bge: 0, mk: '' };
+// Pattern fill (stripes/checker/…): SVG ও canvas দুই জায়গাতেই একই ডিজাইন
+export const PATK = [['', 'None'], ['stripe', 'Stripes'], ['checker', 'Checker'], ['dots', 'Dots'], ['grid', 'Grid'], ['diamond', 'Diamonds']];
+const PATP = { stripe: [['r', 0, 0.5, 1, 0.5]], checker: [['r', 0, 0, 0.5, 0.5], ['r', 0.5, 0.5, 0.5, 0.5]], dots: [['c', 0.5, 0.5, 0.26]], grid: [['r', 0, 0, 1, 0.14], ['r', 0, 0, 0.14, 1]], diamond: [['p', [0.5, 0, 1, 0.5, 0.5, 1, 0, 0.5]]] };
+export const patOn = (l) => !!(l && l.pk && PATP[l.pk]);
+const patD = (l) => ({ a: l.t === 'text' ? hexc(l.color, '#ffffff') : hexc(l.fill, '#00e5ff'), b: hexc(l.pc, '#000000'), ps: Math.min(0.6, Math.max(0.03, +l.ps || 0.12)), pa: +l.pa || 0 });
+function patSvg(id, l, unit) {
+  const { a, b, ps, pa } = patD(l), sz = ps * unit;
+  return `<pattern id="${id}" width="${sz}" height="${sz}" viewBox="0 0 1 1" patternUnits="userSpaceOnUse" patternTransform="rotate(${pa})"><rect width="1" height="1" fill="${a}"/>${PATP[l.pk].map((q) => (q[0] === 'r' ? `<rect x="${q[1]}" y="${q[2]}" width="${q[3]}" height="${q[4]}" fill="${b}"/>` : q[0] === 'c' ? `<circle cx="${q[1]}" cy="${q[2]}" r="${q[3]}" fill="${b}"/>` : `<polygon points="${q[1].join(' ')}" fill="${b}"/>`)).join('')}</pattern>`;
+}
+// canvas pattern: unit = tile এর মাপ (destination এককে), pre = বাইরের matrix (shape এর জন্য scale)
+function patCanvas(x, l, unit, pre) {
+  const { a, b, ps, pa } = patD(l), sz = ps * unit, T = Math.max(8, Math.min(512, Math.round(sz * (pre ? 1 : 1))));
+  const c = document.createElement('canvas'); c.width = c.height = T; const g = c.getContext('2d');
+  g.fillStyle = a; g.fillRect(0, 0, T, T); g.fillStyle = b;
+  PATP[l.pk].forEach((q) => { if (q[0] === 'r') g.fillRect(q[1] * T, q[2] * T, q[3] * T, q[4] * T); else if (q[0] === 'c') { g.beginPath(); g.arc(q[1] * T, q[2] * T, q[3] * T, 0, 7); g.fill(); } else { g.beginPath(); for (let i = 0; i < q[1].length; i += 2) g[i ? 'lineTo' : 'moveTo'](q[1][i] * T, q[1][i + 1] * T); g.fill(); } });
+  const pt = x.createPattern(c, 'repeat'), m = new DOMMatrix();
+  if (pre) m.multiplySelf(pre);
+  m.rotateSelf(pa).scaleSelf(sz / T);
+  pt.setTransform(m); return pt;
+}
+const DEF = { op: 1, sy: 1, hue: 0, sat: 1, bri: 1, ang: 45, sw: 0, rad: 0, pk: '', pc: '#000000', ps: 0.12, pa: 45, cv: 0, grad: false, shadow: false, fill: '#00e5ff', fill2: '#8b5cf6', fill3: '#ff2e93', g3: false, stroke: '#000000', bm: 'normal', shc: '#000000', shb: 0.03, shx: 0, shy: 0, tna: 1, tint: false, bgt: 28, bgs: 1, bge: 0, mk: '' };
 // [selector, layer key, allowed types (null = সব), kind: n=number s=string b=bool]
 const BIND = [
   ['#op', 'op', null, 'n'], ['#sy', 'sy', null, 'n'], ['#bm', 'bm', null, 's'],
-  ['#tt', 'text', ['text'], 's'], ['#tf', 'font', ['text'], 's'], ['#tc', 'color', ['text'], 's'], ['#tcv', 'cv', ['text'], 'n'], ['#ts', 'stroke', ['text'], 's'], 
+  ['#tt', 'text', ['text'], 's'], ['#tf', 'font', ['text'], 's'], ['#tc', 'color', ['text'], 's'], ['#tcv', 'cv', ['text'], 'n'], ['#pk', 'pk', ['text', 'shape'], 's'], ['#pc', 'pc', ['text', 'shape'], 's'], ['#ps', 'ps', ['text', 'shape'], 'n'], ['#pa', 'pa', ['text', 'shape'], 'n'], ['#ts', 'stroke', ['text'], 's'], 
   ['#rh', 'hue', ['img'], 'n'], ['#rs', 'sat', ['img'], 'n'], ['#rb', 'bri', ['img'], 'n'],
   ['#sf', 'fill', ['shape', 'img'], 's'], ['#sg', 'grad', ['shape', 'text', 'img'], 'b'], ['#sf2', 'fill2', ['shape', 'text', 'img'], 's'], ['#sg3', 'g3', ['shape', 'text', 'img'], 'b'], ['#sf3', 'fill3', ['shape', 'text', 'img'], 's'], ['#sa', 'ang', ['shape', 'text', 'img'], 'n'],
   ['#bgt', 'bgt', ['img'], 'n'], ['#bgs', 'bgs', ['img'], 'n'], ['#bge', 'bge', ['img'], 'n'], ['#mk', 'mk', ['img'], 's'], ['#tn', 'tint', ['img'], 'b'], ['#tna', 'tna', ['img'], 'n'],
@@ -198,12 +219,13 @@ export function mountStudio(root, skin, H, opts = {}) {
         <div class="card st-tools" id="tools"><button class="dclose" data-dc>✕</button>
           <button class="tb" data-act="undo" title="Undo (Ctrl+Z)">↶</button><button class="tb" data-act="redo" title="Redo">↷</button><i class="vsep"></i>
           <button class="tb" data-act="dup" title="Duplicate">⧉</button><button class="tb" data-act="flip" title="বাম↔ডান উল্টানো (Mirror)">⇋</button><button class="tb" data-act="flipv" title="উপর↕নিচ উল্টানো">⇅</button><button class="tb" data-act="up" title="Bring forward">⬆</button><button class="tb" data-act="down" title="Send back">⬇</button><button class="tb" data-act="del" title="Delete">🗑</button><i class="vsep"></i>
-          <button class="tb wide on" data-act="snap" title="Snap / Guide লাইন">🧲 Snap</button><button class="tb wide" data-act="clear">Clear all</button><button class="tb wide" data-act="save" title="ডিজাইন ফাইল হিসেবে সেভ">💾 Save</button><button class="tb wide" data-act="open" title="সেভ করা ডিজাইন ফাইল খুলুন">📂 Open</button><input type="file" id="openF" accept=".json,application/json" class="hide">
+          <button class="tb wide on" data-act="snap" title="Snap / Guide লাইন">🧲 Snap</button><button class="tb wide" data-act="clear">Clear all</button><button class="tb wide" data-act="save" title="ডিজাইন ফাইল হিসেবে সেভ">💾 Save</button><button class="tb wide" data-act="open" title="সেভ করা ডিজাইন ফাইল খুলুন">📂 Open</button>${opts.admin ? '' : '<button class="tb wide" data-act="ver" title="আগের version ফিরিয়ে আনুন">🕘 Versions</button>'}<input type="file" id="openF" accept=".json,application/json" class="hide">
         </div>
         <div class="card props hide" id="props">
           <div class="pchips" id="pchips"></div>
           <div class="psec">
             <div class="pg" data-g="text" data-t="text" data-l="✏ Text"><input class="inp" id="tt" placeholder="লেখা…" maxlength="40"><select class="inp" id="tf"></select><label class="mut small">Curve (বাঁকা লেখা)</label><input type="range" id="tcv" min="-100" max="100" step="1"></div>
+            <div class="pg" data-g="pat" data-t="text shape" data-l="▦ Pattern"><label class="mut small">Pattern</label><select class="inp" id="pk">${PATK.map((k) => `<option value="${k[0]}">${k[1]}</option>`).join('')}</select><label class="mut small">২য় রং</label><input type="color" id="pc"><label class="mut small">Size</label><input type="range" id="ps" min="0.03" max="0.6" step="0.01"><label class="mut small">Angle</label><input type="range" id="pa" min="0" max="180" step="1"><p class="mut small" style="width:100%">রং ১ = লেখা/shape এর মূল রং। Gradient থাকলে Pattern কাজ করবে।</p></div>
             <div class="pg" data-g="pre" data-t="text shape img" data-l="🎭 Style"><p class="mut small" style="width:100%">এক ক্লিকে রেডি স্টাইল (রং + outline + shadow)</p><div class="pstl" id="pstl"></div></div>
             <div class="pg" data-g="fill" data-t="text shape img" data-l="text:🎨 Color|shape:🎨 Fill|img:🌈 Tint">
               <span class="inl" data-t="img"><label class="chk mut small"><input type="checkbox" id="tn"> Tint ON (ছবির উপর রং)</label><label class="mut small">Amount</label><input type="range" id="tna" min="0.1" max="1" step="0.05"></span>
@@ -286,13 +308,13 @@ export function mountStudio(root, skin, H, opts = {}) {
     el.classList.toggle('tl', l.t === 'text');
     if (l.t === 'text') {
       el.classList.remove('fx'); el.style.width = 'auto'; el.style.aspectRatio = '';
-      const fs = l.fs * W, lay = l.cv ? curveLay(l.text, fs, l.font, l.cv) : null;
+      const fs = l.fs * W, lay = l.cv || patOn(l) ? curveLay(l.text, fs, l.font, l.cv || 0) : null;
       if (lay) {
         el.style.width = lay.w + 'px'; el.style.height = lay.h * sy + 'px';
         Object.assign(inn.style, { width: lay.w + 'px', height: lay.h + 'px', fontSize: '', fontFamily: '', color: '', fontWeight: '', webkitTextStroke: '0', paintOrder: '', background: '', webkitBackgroundClip: '', backgroundClip: '', webkitTextFillColor: '', transform: `scale(${fl},${sy * fv})`, filter: shadowCss(l, W) });
         const gid = 'cg' + l.id, a = ((l.ang ?? 45) * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
-        const gd = l.grad ? `<defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="${(-ca * lay.w) / 2}" y1="${(-sa * lay.h) / 2}" x2="${(ca * lay.w) / 2}" y2="${(sa * lay.h) / 2}">${gradStops(l).map((cl, i, ar) => `<stop offset="${i / (ar.length - 1)}" stop-color="${cl}"/>`).join('')}</linearGradient></defs>` : '';
-        inn.innerHTML = `<svg width="${lay.w}" height="${lay.h}" viewBox="${-lay.w / 2} ${-lay.h / 2} ${lay.w} ${lay.h}" style="display:block;overflow:visible">${gd}${lay.chars.filter((o) => o.g.trim()).map((o) => `<text transform="translate(${o.x} ${o.y}) rotate(${o.rot})" text-anchor="middle" dominant-baseline="central" font-family="${esc(l.font)},sans-serif" font-size="${fs}" font-weight="800" fill="${l.grad ? `url(#${gid})` : hexc(l.color, '#ffffff')}" ${l.strokeW > 0 ? `stroke="${hexc(l.stroke, '#000000')}" stroke-width="${l.strokeW * fs}" stroke-linejoin="round" paint-order="stroke"` : ''}>${esc(o.g)}</text>`).join('')}</svg>`;
+        const pid = 'cp' + l.id, gd = patOn(l) ? `<defs>${patSvg(pid, l, fs)}</defs>` : l.grad ? `<defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse" x1="${(-ca * lay.w) / 2}" y1="${(-sa * lay.h) / 2}" x2="${(ca * lay.w) / 2}" y2="${(sa * lay.h) / 2}">${gradStops(l).map((cl, i, ar) => `<stop offset="${i / (ar.length - 1)}" stop-color="${cl}"/>`).join('')}</linearGradient></defs>` : '';
+        inn.innerHTML = `<svg width="${lay.w}" height="${lay.h}" viewBox="${-lay.w / 2} ${-lay.h / 2} ${lay.w} ${lay.h}" style="display:block;overflow:visible">${gd}${lay.chars.filter((o) => o.g.trim()).map((o) => `<text transform="translate(${o.x} ${o.y}) rotate(${o.rot})" text-anchor="middle" dominant-baseline="central" font-family="${esc(l.font)},sans-serif" font-size="${fs}" font-weight="800" fill="${patOn(l) ? `url(#${pid})` : l.grad ? `url(#${gid})` : hexc(l.color, '#ffffff')}" ${l.strokeW > 0 ? `stroke="${hexc(l.stroke, '#000000')}" stroke-width="${l.strokeW * fs}" stroke-linejoin="round" paint-order="stroke"` : ''}>${esc(o.g)}</text>`).join('')}</svg>`;
         el.style.aspectRatio = '';
       } else {
       inn.style.width = ''; inn.style.height = ''; el.style.width = 'auto';
@@ -364,6 +386,26 @@ export function mountStudio(root, skin, H, opts = {}) {
 
   /* ---------- history ---------- */
   const save = () => { if (opts.admin) return; try { localStorage.setItem(key, JSON.stringify(layers.filter((l) => !l.local))); } catch (e) {} };
+  /* ---------- version history (browser এ শেষ ১০টি) ---------- */
+  const verKey = 'studio:ver:' + key;
+  const verGet = () => { try { const a = JSON.parse(localStorage.getItem(verKey) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+  function verSnap(force) {
+    if (opts.admin) return;
+    const d = JSON.stringify(layers.filter((l) => !l.local)), a = verGet();
+    if (!layers.some((l) => !l.local) || (a.length && a[0].d === d)) return false;
+    a.unshift({ t: Date.now(), n: layers.filter((l) => !l.local).length, d });
+    while (a.length > 10 || JSON.stringify(a).length > 1.8e6) a.pop();
+    try { localStorage.setItem(verKey, JSON.stringify(a)); return true; } catch (e) { return false; }
+  }
+  const verTimer = setInterval(() => verSnap(), 60000);
+  function verModal() {
+    verSnap();
+    const a = verGet(), fm = (t) => new Date(t).toLocaleString('bn-BD', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+    const ov = modal(`<button class="x" data-close>×</button><h3 class="grad">🕘 Version history</h3><p class="mut small" style="margin-bottom:10px">ডিজাইন নিজে নিজে (প্রতি মিনিটে, বদলালে) এই ব্রাউজারে সেভ হয়। পছন্দের version এ ফিরুন — এখনকার ডিজাইনও আলাদা version হয়ে থাকবে।</p>${a.length ? a.map((v, i) => `<div class="lrow" style="margin-bottom:6px"><span class="lnm">${fm(v.t)} · ${v.n} layer${i === 0 ? ' (সর্বশেষ)' : ''}</span><button class="btn ghost sm" data-r="${i}">↩ Restore</button><button class="btn danger sm" data-d="${i}">🗑</button></div>`).join('') : '<p class="mut">এখনো কোনো version নেই। ডিজাইন করুন, নিজে নিজে জমা হবে।</p>'}<div class="lact" style="margin-top:10px"><button class="btn sm" id="vNow">💾 এখনকার version জমা করুন</button></div>`);
+    ov.querySelector('#vNow').onclick = () => { toast(verSnap() ? 'Version জমা হয়েছে ✅' : 'নতুন কিছু বদলায়নি'); ov.close(); };
+    ov.querySelectorAll('[data-r]').forEach((b) => (b.onclick = () => { const v = verGet()[+b.dataset.r]; if (!v) return; verSnap(); try { const ls = hydrate(JSON.parse(v.d)); mutate(() => { layers = ls; sel = null; msel.clear(); }); toast('Version ফিরিয়ে আনা হয়েছে ↩'); } catch (e) { toast('এই version খোলা গেল না', 'err'); } ov.close(); }));
+    ov.querySelectorAll('[data-d]').forEach((b) => (b.onclick = () => { const x = verGet(); x.splice(+b.dataset.d, 1); try { localStorage.setItem(verKey, JSON.stringify(x)); } catch (e) {} ov.close(); verModal(); }));
+  }
   function push(before) { hist.push(before); if (hist.length > 60) hist.shift(); fut = []; }
   function full() { renderStage(); tools(); cost(); if (tab === 'layers' || tab === 'ref') panel(); save(); }
   function mutate(fn) { const b = snap(); fn(); push(b); full(); }
@@ -446,6 +488,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     if (a === 'clear') { if (layers.length && confirm('সব layer মুছে ফেলবেন?')) mutate(() => { layers = []; sel = null; msel.clear(); }); return; }
     if (a === 'snap') { snapOn = !snapOn; q$('[data-act="snap"]').classList.toggle('on', snapOn); return; }
     if (a === 'save') return saveFile();
+    if (a === 'ver') return verModal();
     if (a === 'open') return q$('#openF').click();
     if (!l) return toast('আগে একটি layer সিলেক্ট করুন', 'err');
     if (a === 'del') mutate(() => { layers = layers.filter((x) => x.id !== l.id); sel = null; });
@@ -850,7 +893,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     }
     if (tab === 'layers') {
       const act2 = `<div class="lact"><button class="btn sm" id="gM">🔗 Merge</button><button class="btn ghost sm" id="gS">Ungroup</button><button class="btn ghost sm" id="gC">⧉ Copy</button><button class="btn danger sm" id="gD">🗑 Delete</button></div><p class="mut small" style="margin:6px 0 10px">২+ layer টিক দিয়ে <b>Merge</b> চাপলে সেগুলো একসাথে সরবে, বড়-ছোট হবে ও ঘুরবে। 👁 দিয়ে hide/show।</p>`;
-      const rowOf = (l) => `<div class="lrow ${l.id === sel ? 'on' : ''} ${l.hid ? 'hid' : ''}" data-id="${l.id}"><input type="checkbox" class="chk" data-m ${msel.has(l.id) ? 'checked' : ''}><span class="lth">${l.t === 'img' ? `<img src="${esc(l.url)}" alt="">` : l.t === 'shape' ? shapeSvg({ ...l, sw: 0 }, '0', 'lt' + l.id) : 'T'}</span><span class="lnm">${esc(l.t === 'text' ? l.text : l.t === 'shape' ? (SHAPES.find((s) => s[0] === l.k) || [0, 'Shape'])[1] : l.name)}</span>${l.gid ? `<i class="gtag" style="background:${gcol(l.gid)}" title="Group"></i>` : ''}<button class="lck" data-u title="উপরে আনুন">▲</button><button class="lck" data-dn title="নিচে নামান">▼</button><button class="lck" data-k title="Lock / Unlock">${l.lock ? '🔒' : '🔓'}</button><button class="lck" data-h title="Hide / Show">${l.hid ? '🚫' : '👁'}</button><button class="lck" data-x title="Delete">🗑</button></div>`;
+      const rowOf = (l) => `<div class="lrow ${l.id === sel ? 'on' : ''} ${l.hid ? 'hid' : ''}" data-id="${l.id}"><input type="checkbox" class="chk" data-m ${msel.has(l.id) ? 'checked' : ''}><span class="lth">${l.t === 'img' ? `<img src="${esc(l.url)}" alt="">` : l.t === 'shape' ? shapeSvg({ ...l, sw: 0 }, '0', 'lt' + l.id) : 'T'}</span><span class="dgh" data-dg title="ধরে টেনে উপর-নিচ করুন">⠿</span><span class="lnm">${esc(l.nm ? l.nm : l.t === 'text' ? l.text : l.t === 'shape' ? (SHAPES.find((s) => s[0] === l.k) || [0, 'Shape'])[1] : l.name)}</span>${l.gid ? `<i class="gtag" style="background:${gcol(l.gid)}" title="Group"></i>` : ''}<button class="lck" data-rn title="নাম বদলান">✏</button><button class="lck" data-u title="উপরে আনুন">▲</button><button class="lck" data-dn title="নিচে নামান">▼</button><button class="lck" data-k title="Lock / Unlock">${l.lock ? '🔒' : '🔓'}</button><button class="lck" data-h title="Hide / Show">${l.hid ? '🚫' : '👁'}</button><button class="lck" data-x title="Delete">🗑</button></div>`;
       const baseRow = `<div class="lrow base ${baseHid ? 'hid' : ''}"><span class="lth"><img src="${esc(skin.preview)}" alt=""></span><span class="lnm">${opts.own ? 'Imported skin (base)' : 'Base skin'}</span><button class="lck" data-bu title="উপরে আনুন (layer এর উপরে)">▲</button><button class="lck" data-bdn title="নিচে নামান (layer এর নিচে)">▼</button><button class="lck" data-bh title="Hide / Show">${baseHid ? '🚫' : '👁'}</button></div>`;
       let rows = '';
       for (let i = layers.length - 1; i >= 0; i--) { if (i === bIdx() - 1) rows += baseRow; rows += rowOf(layers[i]); }
@@ -868,6 +911,13 @@ export function mountStudio(root, skin, H, opts = {}) {
       qa('.lrow[data-id]', p).forEach((r) => {
         const id = r.dataset.id;
         r.onclick = () => { sel = id; refreshSel(); };
+        r.querySelector('[data-rn]').onclick = (e) => { e.stopPropagation(); const l = layers.find((x) => x.id === id); if (!l) return; const n = prompt('Layer এর নাম (খালি রাখলে আগের নাম):', l.nm || ''); if (n !== null) mutate(() => { if (n.trim()) l.nm = n.trim().slice(0, 30); else delete l.nm; }); };
+        r.querySelector('[data-dg]').onpointerdown = (e) => {
+          e.preventDefault(); e.stopPropagation(); const h = e.currentTarget; h.setPointerCapture(e.pointerId); r.classList.add('dragging'); let tgt = null;
+          const mv = (ev) => { const t = document.elementFromPoint(ev.clientX, ev.clientY), row = t && t.closest && t.closest('.lrow[data-id]'); qa('.lrow.dt', p).forEach((x) => x.classList.remove('dt')); tgt = row && row !== r ? row.dataset.id : null; if (row && row !== r) row.classList.add('dt'); };
+          const up = () => { h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); r.classList.remove('dragging'); qa('.lrow.dt', p).forEach((x) => x.classList.remove('dt')); if (tgt) mutate(() => { const i = layers.findIndex((x) => x.id === id), [m] = layers.splice(i, 1), j = layers.findIndex((x) => x.id === tgt); layers.splice(j + (i > j + 0 ? 0 : 1), 0, m); }); };
+          h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+        };
         r.querySelector('[data-m]').onclick = (e) => { e.stopPropagation(); e.target.checked ? msel.add(id) : msel.delete(id); };
         r.querySelector('[data-k]').onclick = (e) => { e.stopPropagation(); const l = layers.find((x) => x.id === id); l && mutate(() => { l.lock = !l.lock; }); };
         r.querySelector('[data-h]').onclick = (e) => { e.stopPropagation(); const l = layers.find((x) => x.id === id); l && mutate(() => { l.hid = !l.hid; }); };
@@ -1037,7 +1087,8 @@ export function mountStudio(root, skin, H, opts = {}) {
     const p = new Path2D();
     p.addPath(new Path2D(shapeD(l)), new DOMMatrix().scale(w / 100, h / 100));
     const rule = l.k === 'ring' ? 'evenodd' : 'nonzero';
-    if (l.grad) {
+    if (patOn(l)) x.fillStyle = patCanvas(x, l, w, new DOMMatrix().scaleSelf(1, h / w));
+    else if (l.grad) {
       const a = ((l.ang ?? 45) * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
       const g = x.createLinearGradient(w / 2 - (c * w) / 2, h / 2 - (s * h) / 2, w / 2 + (c * w) / 2, h / 2 + (s * h) / 2);
       gradStops(l).forEach((cl, i, arr) => g.addColorStop(i / (arr.length - 1), cl));
@@ -1095,14 +1146,15 @@ export function mountStudio(root, skin, H, opts = {}) {
         } else {
           const fs = l.fs * W;
           x.scale(l.flip ? -1 : 1, sy * (l.flv ? -1 : 1));
-          if (l.cv) {
-            const lay = curveLay(l.text, fs, l.font, l.cv), a = ((l.ang ?? 45) * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
+          if (l.cv || patOn(l)) {
+            const lay = curveLay(l.text, fs, l.font, l.cv || 0), a = ((l.ang ?? 45) * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a);
             x.font = `800 ${fs}px "${l.font}", sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
             lay.chars.forEach((o) => {
               if (!o.g.trim()) return;
               const r = (o.rot * Math.PI) / 180; x.save(); x.translate(o.x, o.y); x.rotate(r);
               if (l.strokeW > 0) { x.lineJoin = 'round'; x.lineWidth = fs * l.strokeW; x.strokeStyle = l.stroke; x.strokeText(o.g, 0, 0); }
-              if (l.grad) {
+              if (patOn(l)) x.fillStyle = patCanvas(x, l, fs, null);
+              else if (l.grad) {
                 const lp = (px, py) => { const dx = px - o.x, dy = py - o.y; return [dx * Math.cos(-r) - dy * Math.sin(-r), dx * Math.sin(-r) + dy * Math.cos(-r)]; };
                 const p1 = lp((-ca * lay.w) / 2, (-sa * lay.h) / 2), p2 = lp((ca * lay.w) / 2, (sa * lay.h) / 2), g = x.createLinearGradient(p1[0], p1[1], p2[0], p2[1]);
                 gradStops(l).forEach((cl, i, ar) => g.addColorStop(i / (ar.length - 1), cl)); x.fillStyle = g;
@@ -1148,6 +1200,8 @@ export function mountStudio(root, skin, H, opts = {}) {
       if (l.local) { localSkip++; return; }
       const base = { id: nid(), x: num(l.x, 0.5, -0.5, 1.5), y: num(l.y, 0.5, -0.5, 1.5), rot: num(l.rot, 0, -3600, 3600), flip: !!l.flip, op: num(l.op, 1, 0.05, 1), sy: num(l.sy, 1, 0.05, 8) };
       if (l.lock) base.lock = true;
+      if (l.nm) base.nm = String(l.nm).slice(0, 30);
+      if (PATK.some((k) => k[0] && k[0] === l.pk)) Object.assign(base, { pk: l.pk, pc: col(l.pc, '#000000'), ps: num(l.ps, 0.12, 0.03, 0.6), pa: num(l.pa, 45, 0, 180) });
       if (l.shadow) Object.assign(base, { shadow: true, shc: col(l.shc, '#000000'), shb: num(l.shb, 0.03, 0, 0.1), shx: num(l.shx, 0, -0.1, 0.1), shy: num(l.shy, 0, -0.1, 0.1) });
       if (l.hid) base.hid = true;
       if (l.flv) base.flv = true;
@@ -1168,7 +1222,7 @@ export function mountStudio(root, skin, H, opts = {}) {
     if (localSkip) toast(`${localSkip}টি নিজের ছবি ফাইলে থাকে না, তাই বাদ গেছে`, 'err');
     return out;
   }
-  const common = (l) => ({ x: l.x, y: l.y, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1, sy: l.sy || 1, ...(l.hid ? { hid: true } : {}), ...(l.lock ? { lock: true } : {}), ...(l.flv ? { flv: true } : {}), ...(l.bm && l.bm !== 'normal' ? { bm: l.bm } : {}), ...(l.gid ? { gid: l.gid } : {}), ...(l.shadow ? { shadow: true, shc: l.shc || '#000000', shb: l.shb ?? 0.03, shx: l.shx || 0, shy: l.shy || 0 } : {}) });
+  const common = (l) => ({ x: l.x, y: l.y, rot: l.rot || 0, flip: !!l.flip, op: l.op ?? 1, sy: l.sy || 1, ...(l.hid ? { hid: true } : {}), ...(l.lock ? { lock: true } : {}), ...(l.nm ? { nm: l.nm } : {}), ...(patOn(l) ? { pk: l.pk, pc: l.pc, ps: l.ps, pa: l.pa } : {}), ...(l.flv ? { flv: true } : {}), ...(l.bm && l.bm !== 'normal' ? { bm: l.bm } : {}), ...(l.gid ? { gid: l.gid } : {}), ...(l.shadow ? { shadow: true, shc: l.shc || '#000000', shb: l.shb ?? 0.03, shx: l.shx || 0, shy: l.shy || 0 } : {}) });
   const clean = () => layers.filter((l) => !l.local).map((l) => (l.t === 'img'
     ? { t: 'img', aid: l.aid, w: l.w, hue: l.hue || 0, sat: l.sat ?? 1, bri: l.bri ?? 1, ...(l.tint ? { tint: true, tna: l.tna ?? 1, fill: l.fill || '#00e5ff' } : {}), ...(l.grad ? { grad: true, ang: l.ang ?? 45, fill2: l.fill2 || '#8b5cf6', g3: !!l.g3, fill3: l.fill3 || '#ff2e93' } : {}), ...procFields(l), ...common(l) }
     : l.t === 'shape'
@@ -1223,6 +1277,7 @@ export function mountStudio(root, skin, H, opts = {}) {
       window.removeEventListener('pointercancel', onUp);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('resize', onRes);
+      clearInterval(verTimer); verSnap();
       document.fonts && document.fonts.removeEventListener && document.fonts.removeEventListener('loadingdone', onFontsDone);
       layers.forEach((l) => l.local && l.url && URL.revokeObjectURL(l.url));
       locals.forEach((_, u) => URL.revokeObjectURL(u)); locals.clear();
