@@ -366,3 +366,9 @@ footer{border-top:1px solid var(--line);margin-top:50px;padding:30px 0;color:var
 /* ===== v13b: drag handle, versions ===== */
 .dgh{cursor:grab;touch-action:none;padding:0 6px;color:var(--mut,#8a93b8);font-size:18px;line-height:1;user-select:none}
 .lrow.dragging{opacity:.5}.lrow.dt{outline:2px dashed var(--c1,#00e5ff)}
+
+/* ===== v14: safe-area, harmony, quick start ===== */
+.zone.av{border:2px dashed #ff3b3b;background:repeating-linear-gradient(45deg,rgba(255,59,59,.26) 0 8px,rgba(255,59,59,.06) 8px 16px)}
+.zone.av span{background:rgba(160,0,0,.85)}
+.pst.on{outline:2px solid #fff;outline-offset:2px}
+#harm{margin-left:8px;padding-left:8px;border-left:1px solid var(--line)}

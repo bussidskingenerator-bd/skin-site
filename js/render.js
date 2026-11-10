@@ -2,6 +2,7 @@
 // zone = { label, x,y,w,h (0..1 অনুপাত), rot, font, color, size, weight, align, stroke, strokeW, shadow, upper, mirror }
 export function drawZones(ctx, W, H, zones, vals) {
   for (const z of zones || []) {
+    if (z.avoid) continue;
     const v = (vals && vals[z.label]) || {};
     let text = String(v.text || '').trim();
     if (!text) continue;
@@ -38,6 +39,6 @@ export function drawZones(ctx, W, H, zones, vals) {
 
 export function groupLabels(zones) {
   const map = new Map();
-  for (const z of zones || []) if (z.label && !map.has(z.label)) map.set(z.label, z);
+  for (const z of zones || []) if (!z.avoid && z.label && !map.has(z.label)) map.set(z.label, z);
   return [...map.values()];
 }

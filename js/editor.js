@@ -175,7 +175,7 @@ const DEF = { op: 1, sy: 1, hue: 0, sat: 1, bri: 1, ang: 45, sw: 0, rad: 0, pk: 
 // [selector, layer key, allowed types (null = সব), kind: n=number s=string b=bool]
 const BIND = [
   ['#op', 'op', null, 'n'], ['#sy', 'sy', null, 'n'], ['#bm', 'bm', null, 's'],
-  ['#tt', 'text', ['text'], 's'], ['#tf', 'font', ['text'], 's'], ['#tc', 'color', ['text'], 's'], ['#tcv', 'cv', ['text'], 'n'], ['#pk', 'pk', ['text', 'shape'], 's'], ['#pc', 'pc', ['text', 'shape'], 's'], ['#ps', 'ps', ['text', 'shape'], 'n'], ['#pa', 'pa', ['text', 'shape'], 'n'], ['#ts', 'stroke', ['text'], 's'], 
+  ['#tt', 'text', ['text'], 's'], ['#tf', 'font', ['text'], 's'], ['#tc', 'color', ['text'], 's'], ['#tcv', 'cv', ['text'], 'n'], ['#ptk', 'pk', ['text', 'shape'], 's'], ['#pc', 'pc', ['text', 'shape'], 's'], ['#ps', 'ps', ['text', 'shape'], 'n'], ['#pa', 'pa', ['text', 'shape'], 'n'], ['#ts', 'stroke', ['text'], 's'], 
   ['#rh', 'hue', ['img'], 'n'], ['#rs', 'sat', ['img'], 'n'], ['#rb', 'bri', ['img'], 'n'],
   ['#sf', 'fill', ['shape', 'img'], 's'], ['#sg', 'grad', ['shape', 'text', 'img'], 'b'], ['#sf2', 'fill2', ['shape', 'text', 'img'], 's'], ['#sg3', 'g3', ['shape', 'text', 'img'], 'b'], ['#sf3', 'fill3', ['shape', 'text', 'img'], 's'], ['#sa', 'ang', ['shape', 'text', 'img'], 'n'],
   ['#bgt', 'bgt', ['img'], 'n'], ['#bgs', 'bgs', ['img'], 'n'], ['#bge', 'bge', ['img'], 'n'], ['#mk', 'mk', ['img'], 's'], ['#tn', 'tint', ['img'], 'b'], ['#tna', 'tna', ['img'], 'n'],
@@ -208,8 +208,9 @@ export function mountStudio(root, skin, H, opts = {}) {
   const gcol = (g) => { let h = 0; for (const ch of String(g)) h = (h * 31 + ch.charCodeAt(0)) % 360; return `hsl(${h} 85% 60%)`; };
 
   /* ---------- layout ---------- */
-  const hasZones = !opts.own && Array.isArray(skin.zones) && skin.zones.length > 0;
-  const tabs = [['vshape', '▲', 'Shapes'], ['text', '✏', 'Text'], ...(opts.admin ? [] : [['img', '🖼', 'My image'], ['ref', '📷', 'Reference']]), ...(hasZones ? [['zones', '▦', 'Zones']] : []), ...KINDS, ...(H.toggleFav ? [['fav', '⭐', 'Favorites']] : []), ['layers', '☰', 'Layers']];
+  const zAll = !opts.own && Array.isArray(skin.zones) ? skin.zones : [], hasZones = zAll.some((z) => !z.avoid), hasAvoid = zAll.some((z) => z.avoid);
+  let showSafe = true;
+  const tabs = [['vshape', '▲', 'Shapes'], ['text', '✏', 'Text'], ...(opts.admin ? [] : [['img', '🖼', 'My image'], ['ref', '📷', 'Reference']]), ...(hasZones || hasAvoid ? [['zones', '▦', 'Zones']] : []), ...KINDS, ...(H.toggleFav ? [['fav', '⭐', 'Favorites']] : []), ['layers', '☰', 'Layers']];
   root.innerHTML = `<div class="wrap studio" data-drawer="">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px"><a href="${opts.admin ? '#/templates' : '#/studio'}" class="mut small">← Back</a><h2 class="grad" style="font-size:20px">${esc(skin.name)}</h2>${opts.admin ? '<span class="badge new">TEMPLATE BUILDER</span>' : opts.own ? '<span class="badge free">MY PNG</span>' : `<span class="badge ${skin.type}">${skin.type === 'paid' ? '⚡ ' + skin.price + ' CR' : 'FREE'}</span>`}${opts.template ? `<span class="badge paid">TEMPLATE: ${esc(opts.template.name)}</span>` : ''}</div>
     <nav class="rail" id="rail">${tabs.map((t) => `<button class="rl" data-rt="${t[0]}" title="${t[2]}"><span>${t[1]}</span><small>${SHORT[t[0]] || t[2]}</small></button>`).join('')}<i class="rsep"></i><button class="rl" data-ract="tools" title="Tools"><span>🛠</span><small>Tools</small></button><button class="rl" data-ract="undo"><span>↶</span><small>Undo</small></button><button class="rl" data-ract="redo"><span>↷</span><small>Redo</small></button><button class="rl go" data-ract="export"><span>⬇</span><small>${opts.admin ? 'Save' : 'Export'}</small></button></nav>
@@ -219,13 +220,13 @@ export function mountStudio(root, skin, H, opts = {}) {
         <div class="card st-tools" id="tools"><button class="dclose" data-dc>✕</button>
           <button class="tb" data-act="undo" title="Undo (Ctrl+Z)">↶</button><button class="tb" data-act="redo" title="Redo">↷</button><i class="vsep"></i>
           <button class="tb" data-act="dup" title="Duplicate">⧉</button><button class="tb" data-act="flip" title="বাম↔ডান উল্টানো (Mirror)">⇋</button><button class="tb" data-act="flipv" title="উপর↕নিচ উল্টানো">⇅</button><button class="tb" data-act="up" title="Bring forward">⬆</button><button class="tb" data-act="down" title="Send back">⬇</button><button class="tb" data-act="del" title="Delete">🗑</button><i class="vsep"></i>
-          <button class="tb wide on" data-act="snap" title="Snap / Guide লাইন">🧲 Snap</button><button class="tb wide" data-act="clear">Clear all</button><button class="tb wide" data-act="save" title="ডিজাইন ফাইল হিসেবে সেভ">💾 Save</button><button class="tb wide" data-act="open" title="সেভ করা ডিজাইন ফাইল খুলুন">📂 Open</button>${opts.admin ? '' : '<button class="tb wide" data-act="ver" title="আগের version ফিরিয়ে আনুন">🕘 Versions</button>'}<input type="file" id="openF" accept=".json,application/json" class="hide">
+          <button class="tb wide on" data-act="snap" title="Snap / Guide লাইন">🧲 Snap</button><button class="tb wide" data-act="clear">Clear all</button><button class="tb wide" data-act="save" title="ডিজাইন ফাইল হিসেবে সেভ">💾 Save</button><button class="tb wide" data-act="open" title="সেভ করা ডিজাইন ফাইল খুলুন">📂 Open</button>${opts.admin ? '' : '<button class="tb wide" data-act="qs" title="নাম লিখে এক ক্লিকে সুন্দর লেখা বসান">✨ Quick Start</button><button class="tb wide" data-act="help" title="ব্যবহারের নিয়ম">❓ Help</button><button class="tb wide" data-act="ver" title="আগের version ফিরিয়ে আনুন">🕘 Versions</button>'}<input type="file" id="openF" accept=".json,application/json" class="hide">
         </div>
         <div class="card props hide" id="props">
           <div class="pchips" id="pchips"></div>
           <div class="psec">
             <div class="pg" data-g="text" data-t="text" data-l="✏ Text"><input class="inp" id="tt" placeholder="লেখা…" maxlength="40"><select class="inp" id="tf"></select><label class="mut small">Curve (বাঁকা লেখা)</label><input type="range" id="tcv" min="-100" max="100" step="1"></div>
-            <div class="pg" data-g="pat" data-t="text shape" data-l="▦ Pattern"><label class="mut small">Pattern</label><select class="inp" id="pk">${PATK.map((k) => `<option value="${k[0]}">${k[1]}</option>`).join('')}</select><label class="mut small">২য় রং</label><input type="color" id="pc"><label class="mut small">Size</label><input type="range" id="ps" min="0.03" max="0.6" step="0.01"><label class="mut small">Angle</label><input type="range" id="pa" min="0" max="180" step="1"><p class="mut small" style="width:100%">রং ১ = লেখা/shape এর মূল রং। Gradient থাকলে Pattern কাজ করবে।</p></div>
+            <div class="pg" data-g="pat" data-t="text shape" data-l="▦ Pattern"><label class="mut small">Pattern</label><select class="inp" id="ptk">${PATK.map((k) => `<option value="${k[0]}">${k[1]}</option>`).join('')}</select><label class="mut small">২য় রং</label><input type="color" id="pc"><label class="mut small">Size</label><input type="range" id="ps" min="0.03" max="0.6" step="0.01"><label class="mut small">Angle</label><input type="range" id="pa" min="0" max="180" step="1"><p class="mut small" style="width:100%">রং ১ = লেখা/shape এর মূল রং। Gradient থাকলে Pattern কাজ করবে।</p></div>
             <div class="pg" data-g="pre" data-t="text shape img" data-l="🎭 Style"><p class="mut small" style="width:100%">এক ক্লিকে রেডি স্টাইল (রং + outline + shadow)</p><div class="pstl" id="pstl"></div></div>
             <div class="pg" data-g="fill" data-t="text shape img" data-l="text:🎨 Color|shape:🎨 Fill|img:🌈 Tint">
               <span class="inl" data-t="img"><label class="chk mut small"><input type="checkbox" id="tn"> Tint ON (ছবির উপর রং)</label><label class="mut small">Amount</label><input type="range" id="tna" min="0.1" max="1" step="0.05"></span>
@@ -257,7 +258,7 @@ export function mountStudio(root, skin, H, opts = {}) {
             </div>
             <div class="pg" data-g="adj" data-t="text shape img" data-l="⚙ Opacity / Blend"><label class="mut small">Opacity</label><input type="range" id="op" min="0.1" max="1" step="0.05" value="1"><label class="mut small">Blend</label><select class="inp" id="bm" style="width:auto;padding:6px 8px">${BLENDS.map((b) => `<option>${b}</option>`).join('')}</select><label class="mut small" title="উপর-নিচে টানা / চাপা">↕ Stretch</label><input type="range" id="sy" min="0.2" max="4" step="0.05" value="1"><button class="tb wide" id="syr" title="Stretch রিসেট">1×</button></div>
           </div>
-          <div id="palc" class="st-text"><b class="mut small">🎨</b><button class="tb wide" id="pickB" title="ছবি/স্ক্রিন থেকে রং তুলুন">💧 Pick</button><select class="inp" id="pk" style="width:auto;padding:6px 8px"><option value="fill">→ Fill / Text</option><option value="border">→ Border</option><option value="c2">→ Gradient 2</option></select><span id="pal" class="pal"></span></div>
+          <div id="palc" class="st-text"><b class="mut small">🎨</b><button class="tb wide" id="pickB" title="ছবি/স্ক্রিন থেকে রং তুলুন">💧 Pick</button><select class="inp" id="pk" style="width:auto;padding:6px 8px"><option value="fill">→ Fill / Text</option><option value="border">→ Border</option><option value="c2">→ Gradient 2</option></select><span id="pal" class="pal"></span><span id="harm" class="pal"></span></div>
         </div>
         <div class="card" style="padding:12px"><div class="vp" id="vp"><div class="stage2" id="stg"><img id="base" alt=""></div><div class="zbar"><button class="tb" id="zout" title="Zoom out">−</button><button class="tb wide" id="zfit" title="Fit">100%</button><button class="tb" id="zin" title="Zoom in">＋</button></div></div><p class="c mut small" style="margin-top:8px">টেনে সরান · কোণার ডট দিয়ে বড়-ছোট · লাল ডট দিয়ে ঘোরান · ＋/− বা দুই আঙুলে zoom · zoom করে ফাঁকা জায়গা টেনে সরান</p></div>
         ${opts.admin ? `<div class="card st-export"><div style="flex:1;min-width:240px"><span class="mut small">TEMPLATE INFO</span><div class="row" style="margin-top:6px"><input class="inp" id="tpName" maxlength="40" placeholder="Template name" value="${esc((opts.template && opts.template.name) || '')}"><input class="inp" id="tpCat" maxlength="30" placeholder="Category (optional)" value="${esc((opts.template && opts.template.category) || '')}"><input class="inp" id="tpPrice" type="number" min="0" placeholder="Extra price" title="Template এর আলাদা দাম (credits), 0 = বিনামূল্যে" value="${(opts.template && opts.template.price) || 0}" style="max-width:120px"></div></div><button class="btn big" id="tpSave">💾 Save template</button></div>` : `<div class="card st-export"><div><span class="mut small">EXPORT COST</span><div id="costTx" style="font-family:var(--hf);font-size:18px"></div></div><button class="btn big" id="exp">⬇ Export PNG</button></div>`}
@@ -459,6 +460,47 @@ export function mountStudio(root, skin, H, opts = {}) {
     ov.querySelector('#impA').onclick = () => { done = true; addLocal(cur, isRef); ov.close ? ov.close() : ov.remove(); };
     ov.onClose = () => { URL.revokeObjectURL(u); };
   }
+  /* ---------- Quick Start wizard ---------- */
+  function qsModal() {
+    const zs = zAll.map((z, i) => [z, i]).filter(([z]) => !z.avoid);
+    const ov = modal(`<button class="x" data-close>×</button><h3 class="grad">✨ Quick Start</h3><p class="mut small" style="margin-bottom:10px">নাম লিখুন, স্টাইল বাছুন — আমরা সুন্দর করে বসিয়ে দেব। পরে সব বদলানো যাবে।</p>
+      <div class="field"><label>বাসের নাম / লেখা</label><input class="inp" id="qn" maxlength="24" placeholder="যেমন: RAJA EXPRESS"></div>
+      <label class="mut small">স্টাইল</label><div class="pstl" id="qp" style="margin:6px 0 10px">${PRESETS.map((p, i) => `<button class="pst ${i === 0 ? 'on' : ''}" data-q="${i}" style="background:${p[2] ? `linear-gradient(135deg,${p[1]},${p[2]})` : p[1]};color:${p[2] ? '#fff' : p[1] === '#ffffff' || p[1] === '#ffcc00' ? '#222' : '#fff'}">${p[0]}</button>`).join('')}</div>
+      <div class="row"><div class="field"><label>আকৃতি</label><select class="inp" id="qc"><option value="0">সোজা</option><option value="45">ধনুকের মতো ↑</option><option value="-45">নিচে বাঁকা ↓</option></select></div>
+      <div class="field"><label>কোথায় বসবে</label><select class="inp" id="qz"><option value="-1">মাঝখানে</option>${zs.map(([z, i]) => `<option value="${i}">${esc(z.label || 'Zone ' + (i + 1))}</option>`).join('')}</select></div></div>
+      <button class="btn big" id="qgo" style="width:100%">✨ বানান</button>`);
+    let pi = 0;
+    ov.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => { pi = +b.dataset.q; ov.querySelectorAll('[data-q]').forEach((x) => x.classList.toggle('on', x === b)); }));
+    ov.querySelector('#qgo').onclick = () => {
+      const txt = ov.querySelector('#qn').value.trim() || 'MY BUS', zi = +ov.querySelector('#qz').value, cvv = +ov.querySelector('#qc').value;
+      mutate(() => {
+        const l = { id: nid(), t: 'text', text: txt, font: fonts()[0], color: '#ffffff', stroke: '#000000', strokeW: 0.08, fs: 0.09, x: 0.5, y: 0.5, sy: 1, rot: 0, flip: false, op: 1 };
+        applyPreset(l, pi); if (cvv) l.cv = cvv;
+        if (zi >= 0) fitToZone(l, zAll[zi]);
+        layers.push(l); sel = l.id;
+      });
+      afterAdd(false); ov.close();
+    };
+  }
+  /* ---------- Help tour ---------- */
+  const TOUR = [['🚌 Skin বেছে নিন', 'Base skin বা নিজের PNG এর উপর ডিজাইন করবেন। Template থাকলে 📥 Collect করে যেকোনো skin এ বসাতে পারেন।'], ['🧩 Asset টেনে আনুন', 'বাঁ পাশে Banner, Shape, Sticker ইত্যাদি আছে। ট্যাপ করুন বা টেনে skin এর উপর ফেলুন। 🔍 দিয়ে নাম/tag এ খুঁজুন।'], ['👆 Layer সিলেক্ট করুন', 'কিছুতে ট্যাপ করলে নিচের bar এ শুধু ওই layer এর দরকারি অপশন আসে — রং, Stroke, Shadow, Crop, Remove BG, Style ইত্যাদি।'], ['✨ Quick Start', 'ওপরের ✨ Quick Start চাপলে নাম লিখে স্টাইল বাছলেই সুন্দর লেখা বসে যাবে।'], ['💾 Save ও Versions', 'ডিজাইন নিজে নিজে সেভ হয়। 🕘 Versions থেকে আগের অবস্থায় ফেরা যায়। শেষে ⬇ Export PNG।']];
+  function tourModal(i = 0) {
+    const t = TOUR[i], last = i === TOUR.length - 1;
+    const ov = modal(`<button class="x" data-close>×</button><p class="mut small">ধাপ ${i + 1}/${TOUR.length}</p><h3 class="grad">${t[0]}</h3><p style="margin:10px 0 18px">${t[1]}</p><div class="lact"><button class="btn ghost sm" data-close>Skip</button><button class="btn sm" id="tourN">${last ? '✔ শুরু করি' : 'পরের ধাপ →'}</button></div>`);
+    try { localStorage.setItem('studio:tour', '1'); } catch (e) {}
+    ov.querySelector("#tourN").onclick = () => { ov.close(); if (!last) tourModal(i + 1); };
+  }
+  /* ---------- Colour harmony ---------- */
+  const hsl = (hex) => { const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, L = (mx + mn) / 2; let h = 0; if (d) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [(h * 60 + 360) % 360, d ? d / (1 - Math.abs(2 * L - 1)) : 0, L]; };
+  const hslHex = (h, s2, L) => { h = ((h % 360) + 360) % 360; const c = (1 - Math.abs(2 * L - 1)) * s2, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = L - c / 2, [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x]; return '#' + [r, g, b].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join(''); };
+  function renderHarm() {
+    const b = q$('#harm'); if (!b) return;
+    const l = cur(), base = hexc(l && l.t === 'text' ? l.color : l && l.t === 'shape' ? l.fill : colors[0], '#00e5ff');
+    const [h, s2, L] = hsl(base.length === 7 ? base : '#00e5ff'), S2 = Math.max(0.35, s2);
+    const set = [['↔', hslHex(h + 180, S2, L)], ['◂', hslHex(h - 30, S2, L)], ['▸', hslHex(h + 30, S2, L)], ['△', hslHex(h + 120, S2, L)], ['△', hslHex(h - 120, S2, L)], ['☀', hslHex(h, S2, Math.min(0.85, L + 0.25))], ['●', hslHex(h, S2, Math.max(0.15, L - 0.25))]];
+    b.innerHTML = '<span class="mut small" title="এখনকার রঙের সাথে মানানসই রং">🎯</span>' + set.map((c) => `<i data-c="${c[1]}" style="background:${c[1]}" title="${c[0]} ${c[1]}"></i>`).join('');
+    qa('i', b).forEach((i) => (i.onclick = () => useColor(i.dataset.c, true)));
+  }
   function addText() {
     mutate(() => { const l = { id: nid(), t: 'text', text: 'MY BUS', font: fonts()[0], color: '#ffffff', stroke: '#000000', strokeW: 0.08, fs: 0.08, x: 0.5, y: 0.5, sy: 1, rot: 0, flip: false, op: 1 }; layers.push(l); sel = l.id; });
     afterAdd(true);
@@ -489,6 +531,8 @@ export function mountStudio(root, skin, H, opts = {}) {
     if (a === 'snap') { snapOn = !snapOn; q$('[data-act="snap"]').classList.toggle('on', snapOn); return; }
     if (a === 'save') return saveFile();
     if (a === 'ver') return verModal();
+    if (a === 'qs') return qsModal();
+    if (a === 'help') return tourModal();
     if (a === 'open') return q$('#openF').click();
     if (!l) return toast('আগে একটি layer সিলেক্ট করুন', 'err');
     if (a === 'del') mutate(() => { layers = layers.filter((x) => x.id !== l.id); sel = null; });
@@ -624,15 +668,13 @@ export function mountStudio(root, skin, H, opts = {}) {
   };
   q$('#bgB').onclick = () => { const l = cur(); l && l.local && editLocal(l, 'bg'); };
   q$('#pstl').innerHTML = PRESETS.map((p, i) => `<button class="pst" data-p="${i}" title="${p[0]}" style="background:${p[2] ? `linear-gradient(135deg,${p[1]},${p[2]})` : p[1]};color:${p[2] ? '#fff' : p[1] === '#ffffff' || p[1] === '#ffcc00' ? '#222' : '#fff'}">${p[0]}</button>`).join('');
-  q$('#pstl').onclick = (e) => {
-    const b = e.target.closest('[data-p]'), l = cur(); if (!b || !l) return;
-    const [, a, c, st, sw, sh, gl] = PRESETS[+b.dataset.p];
-    mutate(() => {
-      if (l.t === 'text') { l.color = a; l.grad = !!c; if (c) { l.fill2 = c; l.g3 = false; l.ang = 90; } l.stroke = st; l.strokeW = sw; }
-      else if (l.t === 'shape') { l.fill = a; l.grad = !!c; if (c) { l.fill2 = c; l.g3 = false; l.ang = 90; } l.stroke = st; l.sw = sw * 0.25; }
-      if (sh) { l.shadow = true; l.shc = sh; l.shb = gl ? 0.035 : 0.015; l.shx = 0; l.shy = gl ? 0 : 0.012; } else l.shadow = false;
-    });
-  };
+  function applyPreset(l, i) {
+    const [, a, c, st, sw, sh, gl] = PRESETS[i];
+    if (l.t === 'text') { l.color = a; l.grad = !!c; if (c) { l.fill2 = c; l.g3 = false; l.ang = 90; } l.stroke = st; l.strokeW = sw; }
+    else if (l.t === 'shape') { l.fill = a; l.grad = !!c; if (c) { l.fill2 = c; l.g3 = false; l.ang = 90; } l.stroke = st; l.sw = sw * 0.25; }
+    if (sh) { l.shadow = true; l.shc = sh; l.shb = gl ? 0.035 : 0.015; l.shx = 0; l.shy = gl ? 0 : 0.012; } else l.shadow = false;
+  }
+  q$('#pstl').onclick = (e) => { const b = e.target.closest('[data-p]'), l = cur(); if (b && l) mutate(() => applyPreset(l, +b.dataset.p)); };
   q$('#rr').onclick = () => { const l = cur(); if (l && l.t === 'img') mutate(() => { l.hue = 0; l.sat = 1; l.bri = 1; }); };
   let pg = '';
   const DEFG = { text: 'text', shape: 'fill', img: 'imgc' };
@@ -651,6 +693,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   q$('#pchips').onclick = (e) => { const b = e.target.closest('[data-pg]'); if (b) { pg = b.dataset.pg; tools(); } };
   function tools() {
     const l = cur(), t = l && l.t;
+    renderHarm();
     syncProps(l);
     if (l) {
       BIND.forEach(([id, k, types, kind]) => {
@@ -868,8 +911,9 @@ export function mountStudio(root, skin, H, opts = {}) {
       return;
     }
     if (tab === 'zones') {
-      p.innerHTML = `<p class="mut small" style="margin-bottom:10px">এই skin এ নামের জন্য ঠিক করা জায়গাগুলো। ট্যাপ করে সেখানে shape/লেখা বসান, বা সিলেক্ট করা layer কে ওই জায়গায় ফিট করুন।</p><label class="chk mut small" style="margin-bottom:10px"><input type="checkbox" id="zshow" ${showZones ? 'checked' : ''}> Stage এ zone দেখান</label>${skin.zones.map((z, i) => `<div class="zrow" data-i="${i}"><b style="flex:1;min-width:70px">${esc(z.label || 'Zone ' + (i + 1))}</b><button class="btn ghost sm" data-zs>▭ Shape</button><button class="btn ghost sm" data-zt>T Text</button><button class="btn ghost sm" data-zf>⤢ Fit</button></div>`).join('')}`;
+      p.innerHTML = `<p class="mut small" style="margin-bottom:10px">এই skin এ নামের জন্য ঠিক করা জায়গাগুলো। ট্যাপ করে সেখানে shape/লেখা বসান, বা সিলেক্ট করা layer কে ওই জায়গায় ফিট করুন।</p><label class="chk mut small" style="margin-bottom:10px"><input type="checkbox" id="zshow" ${showZones ? 'checked' : ''}> Stage এ zone দেখান</label>${hasAvoid ? `<label class="chk mut small" style="margin-bottom:10px"><input type="checkbox" id="zsafe" ${showSafe ? 'checked' : ''}> 🚫 নো-ডিজাইন এলাকা (জানালা/দরজা) লাল করে দেখান</label>` : ''}${skin.zones.map((z, i) => z.avoid ? '' : `<div class="zrow" data-i="${i}"><b style="flex:1;min-width:70px">${esc(z.label || 'Zone ' + (i + 1))}</b><button class="btn ghost sm" data-zs>▭ Shape</button><button class="btn ghost sm" data-zt>T Text</button><button class="btn ghost sm" data-zf>⤢ Fit</button></div>`).join('')}`;
       q$('#zshow').onchange = (e) => { showZones = e.target.checked; zonesOverlay(); };
+      const zs = q$('#zsafe'); if (zs) zs.onchange = (e) => { showSafe = e.target.checked; zonesOverlay(); };
       qa('.zrow', p).forEach((r) => {
         const z = skin.zones[+r.dataset.i];
         r.querySelector('[data-zs]').onclick = () => zoneShape(z);
@@ -952,6 +996,7 @@ export function mountStudio(root, skin, H, opts = {}) {
   let colors = [];
   try { colors = JSON.parse(localStorage.getItem('studio:colors') || '[]').filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 14); } catch (e) {}
   function renderPal() {
+    renderHarm();
     const b = q$('#pal');
     b.innerHTML = colors.length ? colors.map((c) => `<i data-c="${c}" style="background:${c}" title="${c}"></i>`).join('') : '<span class="mut small">রং তুললে এখানে জমা হবে</span>';
     qa('i', b).forEach((i) => (i.onclick = () => useColor(i.dataset.c, true)));
@@ -1023,12 +1068,12 @@ export function mountStudio(root, skin, H, opts = {}) {
   /* ---------- zones: নাম বসানোর জায়গা ---------- */
   function zonesOverlay() {
     qa('.zone', stg).forEach((z) => z.remove());
-    if (!showZones || !hasZones) return;
-    skin.zones.forEach((z, i) => {
+    zAll.forEach((z, i) => {
+      if (z.avoid ? !showSafe : !showZones) return;
       const d = document.createElement('div');
-      d.className = 'zone';
+      d.className = 'zone' + (z.avoid ? ' av' : '');
       Object.assign(d.style, { left: z.x * 100 + '%', top: z.y * 100 + '%', width: z.w * 100 + '%', height: z.h * 100 + '%', transform: `rotate(${z.rot || 0}deg)` });
-      d.innerHTML = `<span>${esc(z.label || 'Zone ' + (i + 1))}</span>`;
+      d.innerHTML = `<span>${z.avoid ? '🚫 ' : ''}${esc(z.label || 'Zone ' + (i + 1))}</span>`;
       stg.appendChild(d);
     });
   }
