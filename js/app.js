@@ -7,6 +7,7 @@ import {
 import { getDatabase, ref, onValue, get, set, remove, query, limitToLast } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 import { drawZones, groupLabels } from './render.js';
 import { mountStudio, miniLayersHtml } from './editor.js';
+import { viewAppDl } from './appdl.js';
 
 const app = initializeApp(FIREBASE);
 const auth = getAuth(app);
@@ -114,7 +115,7 @@ function renderHeader() {
   $('#hAva') && ($('#hAva').onclick = accountModal);
   const foot = $('#foot');
   const tg = S.cfg.site && S.cfg.site.telegram;
-  foot.innerHTML = `<p>© ${new Date().getFullYear()} ${esc(name)} · Not affiliated with Bus Simulator Indonesia / Maleo.</p>${tg ? `<p style="margin-top:6px"><a href="${esc(tg)}" target="_blank" rel="noopener">Join our Telegram</a></p>` : ''}`;
+  foot.innerHTML = `<p>© ${new Date().getFullYear()} ${esc(name)} · Not affiliated with Bus Simulator Indonesia / Maleo.</p><p style="margin-top:6px"><a href="#/app">📱 Get the Android app</a>${tg ? ` · <a href="${esc(tg)}" target="_blank" rel="noopener">Join our Telegram</a>` : ''}</p>`;
 }
 $('#tabAcc').onclick = (e) => { e.preventDefault(); S.user ? accountModal() : loginModal(); };
 
@@ -195,12 +196,12 @@ function route() {
   S.studioDestroy && S.studioDestroy();
   S.studioDestroy = null; S.editorRefresh = null;
   const [p, arg, arg2] = (location.hash.replace(/^#\/?/, '') || 'home').split('/');
-  S.view = ['home', 'skins', 'make', 'studio', 'wallet'].includes(p) ? p : 'home';
+  S.view = ['home', 'skins', 'make', 'studio', 'wallet', 'app'].includes(p) ? p : 'home';
   $$('#nav a,#tabbar a[data-p]').forEach((a) => a.classList.toggle('on', a.dataset.p === (S.view === 'make' ? 'skins' : S.view)));
   const v = $('#view');
   if (!S.ready.cfg || !S.ready.skins || !S.ready.assets || !S.ready.templates) { v.innerHTML = '<div class="spin"></div>'; return; }
   S.redraw = null;
-  ({ home: viewHome, skins: viewSkins, make: () => viewMake(arg), studio: () => viewStudio(arg, arg2), wallet: viewWallet })[S.view]();
+  ({ home: viewHome, skins: viewSkins, make: () => viewMake(arg), studio: () => viewStudio(arg, arg2), wallet: viewWallet, app: () => viewAppDl($('#view'), { S, esc, toast, fmtDate }) })[S.view]();
 }
 
 /* ================= views ================= */
