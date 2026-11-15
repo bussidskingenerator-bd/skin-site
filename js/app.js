@@ -9,6 +9,10 @@ import { drawZones, groupLabels } from './render.js';
 import { mountStudio, miniLayersHtml } from './editor.js';
 import { viewAppDl } from './appdl.js';
 
+/* true = শুধু APK Download পেজ চালু, বাকি সব বন্ধ । আবার সব চালু করতে false করুন */
+const APK_ONLY = true;
+if (APK_ONLY) document.documentElement.classList.add('apkonly');
+
 const app = initializeApp(FIREBASE);
 const auth = getAuth(app);
 const db = getDatabase(app);
@@ -196,7 +200,7 @@ function route() {
   S.studioDestroy && S.studioDestroy();
   S.studioDestroy = null; S.editorRefresh = null;
   const [p, arg, arg2] = (location.hash.replace(/^#\/?/, '') || 'home').split('/');
-  S.view = ['home', 'skins', 'make', 'studio', 'wallet', 'app'].includes(p) ? p : 'home';
+  S.view = APK_ONLY ? 'app' : (['home', 'skins', 'make', 'studio', 'wallet', 'app'].includes(p) ? p : 'home');
   $$('#nav a,#tabbar a[data-p]').forEach((a) => a.classList.toggle('on', a.dataset.p === (S.view === 'make' ? 'skins' : S.view)));
   const v = $('#view');
   if (!S.ready.cfg || !S.ready.skins || !S.ready.assets || !S.ready.templates) { v.innerHTML = '<div class="spin"></div>'; return; }
