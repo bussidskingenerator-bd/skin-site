@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Free Token — LiveryLab</title>
+<meta name="theme-color" content="#05060f">
+<link rel="icon" href="../icon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Hind+Siliguri:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#05060f;--c1:#00e5ff;--c2:#8b5cf6;--c3:#ff2e93;--ok:#2dff9a;--tx:#e8ecff;--mut:#8a93b8;--line:rgba(120,140,255,.18);--card:rgba(16,20,40,.78)}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--tx);font-family:'Hind Siliguri',system-ui,sans-serif;line-height:1.6;overflow-x:hidden;padding-bottom:70px}
+body:before{content:"";position:fixed;inset:0;z-index:-1;background:radial-gradient(60% 40% at 15% 0%,rgba(139,92,246,.28),transparent),radial-gradient(50% 40% at 90% 10%,rgba(0,229,255,.18),transparent)}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+h1,h2,.btn{font-family:'Rajdhani','Hind Siliguri',sans-serif}
+.grad{background:linear-gradient(90deg,var(--c1),var(--c2),var(--c3));-webkit-background-clip:text;background-clip:text;color:transparent}
+.mut{color:var(--mut)}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 0}
+.logo{font-weight:700;font-size:21px}
+.logo i{font-style:normal;margin-right:8px}
+a.back{color:var(--c1);text-decoration:none;font-size:14px;border:1px solid var(--line);padding:6px 14px;border-radius:18px}
+.hero{text-align:center;padding:18px 0 10px}
+.hero .coin{font-size:62px;filter:drop-shadow(0 0 22px rgba(255,200,61,.6))}
+h1{font-size:clamp(30px,7vw,46px);line-height:1.1;margin:8px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;margin:14px 0;backdrop-filter:blur(8px)}
+.steps{list-style:none;padding:0}
+.steps li{display:flex;gap:12px;align-items:center;padding:12px 4px;border-bottom:1px solid var(--line)}
+.steps li:last-child{border:0}
+.n{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:700;background:rgba(255,255,255,.07);border:1px solid var(--line)}
+li.done .n{background:var(--ok);color:#03180d;border-color:var(--ok)}
+.st{flex:1}
+.st b{display:block}.st small{color:var(--mut)}
+.bar{height:6px;border-radius:4px;background:rgba(255,255,255,.08);margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--c1),var(--c2),var(--c3));transition:width .3s}
+.btn{display:flex;gap:10px;align-items:center;justify-content:center;cursor:pointer;border:0;text-decoration:none;color:#031018;font-weight:700;font-size:19px;padding:15px 30px;border-radius:16px;width:100%;background:linear-gradient(90deg,var(--c1),var(--c2),var(--c3));box-shadow:0 0 28px rgba(139,92,246,.4)}
+.btn:active{transform:scale(.98)}
+.btn[disabled]{opacity:.4;pointer-events:none;box-shadow:none}
+.btn.ghost{background:transparent;color:var(--tx);border:1px solid var(--line);box-shadow:none;font-size:15px;padding:11px 18px;margin-top:10px}
+.key{font-family:'Rajdhani',monospace;font-size:clamp(26px,7vw,38px);letter-spacing:2px;text-align:center;padding:16px 8px;border:2px dashed var(--ok);border-radius:16px;color:var(--ok);margin:12px 0;word-break:break-all;user-select:all}
+.ad{display:flex;justify-content:center;margin:14px 0;min-height:60px}
+.ad iframe{border:0;max-width:100%;background:transparent}
+.fill h2{font-size:22px;margin-bottom:6px}
+.fill p{color:var(--mut);font-size:15px;margin-bottom:8px}
+.hide{display:none!important}
+#stick{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;justify-content:center;background:rgba(5,6,15,.92);border-top:1px solid var(--line);min-height:56px}
+.toast{position:fixed;left:50%;top:18px;transform:translateX(-50%);background:#101428;border:1px solid var(--line);padding:10px 18px;border-radius:12px;opacity:0;transition:.3s;pointer-events:none;z-index:99;max-width:90vw}
+.toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="logo grad"><i>🚌</i>LiveryLab</div><a class="back" href="../">← Home</a></header>
+  <div class="ad slot"></div>
+  <div class="hero"><div class="coin">🪙</div><h1 class="grad">Free Token নিন</h1><p class="mut">নিচের ধাপগুলো শেষ করলে একটি Secret Key পাবেন। অ্যাপে Redeem করলে ১ থেকে ৫টি Token!</p></div>
+
+  <div class="card" id="main">
+    <div id="off" class="hide"><b>Token claim এখন বন্ধ আছে।</b> পরে আবার আসুন।</div>
+    <div id="work">
+      <ul class="steps">
+        <li id="s1"><span class="n">1</span><div class="st"><b>অপেক্ষা করুন <span id="wl">10</span> সেকেন্ড</b><small>এই পেজেই থাকুন (অন্য ট্যাবে গেলে সময় থামে)</small><div class="bar"><i id="b1"></i></div></div></li>
+        <li id="s2"><span class="n">2</span><div class="st"><b>পেজ একদম নিচ পর্যন্ত স্ক্রল করুন</b><small>নিচে নামুন, সব দেখুন</small><div class="bar"><i id="b2"></i></div></div></li>
+        <li id="s3"><span class="n">3</span><div class="st"><b>একটি Ad তে ক্লিক করুন <span id="cl"></span></b><small>যেকোনো বিজ্ঞাপন বা নিচের Sponsor বাটনে ক্লিক করুন</small><div class="bar"><i id="b3"></i></div></div></li>
+        <li id="s4"><span class="n">4</span><div class="st"><b>Secret Key জেনারেট করুন</b><small>উপরের ৩টি শেষ হলে বাটন চালু হবে</small></div></li>
+      </ul>
+      <button class="btn" id="go">▶ শুরু করুন</button>
+      <a class="btn ghost hide" id="sp" target="_blank" rel="noopener">🎁 Sponsor দেখুন (ক্লিক গণনা হবে)</a>
+    </div>
+    <div id="res" class="hide">
+      <b>✅ আপনার Secret Key</b>
+      <div class="key" id="key"></div>
+      <button class="btn" id="cp">📋 Copy Key</button>
+      <p class="mut" style="margin-top:10px;font-size:14px">LiveryLab অ্যাপ → <b>Wallet</b> → <b>Redeem Key</b> এ এই Key বসান। Key একবারই কাজ করবে এবং <span id="ex"></span> পর্যন্ত বৈধ।</p>
+    </div>
+  </div>
+
+  <div class="ad slot"></div>
+  <div class="card fill"><h2>কীভাবে কাজ করে?</h2><p>প্রতিটি Key একবার ব্যবহার করা যায়। Redeem করলে র‍্যান্ডম ১–৫ Token আপনার Wallet এ যোগ হবে।</p></div>
+  <div class="ad slot"></div>
+  <div class="card fill"><h2>Token দিয়ে কী করবেন?</h2><p>Paid skin, premium asset এবং 2K / 4K / 8K high-quality Export — সব Token দিয়ে।</p></div>
+  <div class="ad slot"></div>
+  <div class="card fill"><h2>নিয়ম</h2><p>এক ডিভাইস/নেটওয়ার্ক থেকে নির্দিষ্ট সময় পরপর Key নেওয়া যায়। অসৎ উপায়ে Key নিলে Token বাতিল হতে পারে।</p></div>
+  <div class="ad slot"></div>
+  <div class="card fill"><h2>আমাদের সমর্থন করুন ❤️</h2><p>এই বিজ্ঞাপনগুলো থেকেই LiveryLab চলে। সাথে থাকার জন্য ধন্যবাদ।</p></div>
+  <div class="ad slot"></div>
+  <p class="mut" style="text-align:center;font-size:13px;padding:20px 0">© LiveryLab</p>
+</div>
+<div id="stick"></div>
+<div class="toast" id="tt"></div>
+<script>
+var API="https://bussid-skin-api.bussidskingeneratorbd.workers.dev";
+var $=function(i){return document.getElementById(i)};
+function toast(m){var t=$('tt');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(function(){t.classList.remove('on')},3200)}
+function api(p,body){return fetch(API+p,{method:body?'POST':'GET',headers:{'content-type':'application/json'},body:body?JSON.stringify(body):undefined}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j})})}
+var cfg=null,S={cid:null,vis:0,scroll:0,clicks:0,started:false,done:false,lastClick:0};
+
+function adFrame(code,stick){
+  var w=320,h=50,m=code.match(/['"]width['"]\s*:\s*(\d+)/),n=code.match(/['"]height['"]\s*:\s*(\d+)/);
+  if(m)w=+m[1];if(n)h=+n[1];
+  var f=document.createElement('iframe');f.width=w;f.height=h;f.scrolling='no';
+  f.setAttribute('sandbox','allow-scripts allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-top-navigation-by-user-activation');
+  f.srcdoc='<!doctype html><body style="margin:0;background:transparent">'+code+'</body>';
+  return f;
+}
+function mountAds(){
+  var slots=document.querySelectorAll('.slot'),b=cfg.banners||[];
+  for(var i=0;i<slots.length;i++){if(!b.length)break;slots[i].appendChild(adFrame(b[i%b.length]))}
+  if(b.length)$('stick').appendChild(adFrame(b[0],true));else $('stick').style.display='none';
+  (cfg.scripts||[]).forEach(function(u){var s=document.createElement('script');s.async=true;s.src=u;document.body.appendChild(s)});
+  if(cfg.direct){var a=$('sp');a.href=cfg.direct;a.classList.remove('hide');a.addEventListener('click',function(){hit()})}
+}
+function upd(){
+  var need=cfg.clicks;
+  var p1=Math.min(1,S.vis/cfg.wait),p2=cfg.scroll?Math.min(1,S.scroll/0.92):1,p3=need?Math.min(1,S.clicks/need):1;
+  $('b1').style.width=p1*100+'%';$('b2').style.width=p2*100+'%';$('b3').style.width=p3*100+'%';
+  $('wl').textContent=Math.max(0,Math.ceil(cfg.wait-S.vis));
+  $('s1').className=p1>=1?'done':'';$('s2').className=p2>=1?'done':'';$('s3').className=p3>=1?'done':'';
+  var ok=S.started&&p1>=1&&p2>=1&&p3>=1;
+  $('s4').className=ok?'':'';
+  $('go').disabled=S.started&&!ok&&!S.finishing;
+  $('go').textContent=!S.started?'▶ শুরু করুন':ok?'🔑 Secret Key জেনারেট করুন':'অপেক্ষা করুন…';
+  return ok;
+}
+function hit(){
+  if(!S.started||Date.now()-S.lastClick<2500)return;
+  S.lastClick=Date.now();S.clicks++;upd();
+}
+window.addEventListener('blur',function(){setTimeout(function(){var e=document.activeElement;if(e&&e.tagName==='IFRAME'){hit();setTimeout(function(){try{e.blur();window.focus()}catch(x){}},50)}},0)});
+window.addEventListener('scroll',function(){
+  var h=document.documentElement,r=(window.scrollY+window.innerHeight)/Math.max(1,h.scrollHeight);
+  if(S.started&&r>S.scroll){S.scroll=r;upd()}
+},{passive:true});
+setInterval(function(){if(S.started&&!S.done&&document.visibilityState==='visible'&&document.hasFocus!==undefined){S.vis+=0.5;if(S.vis>cfg.wait+30)S.vis=cfg.wait+30;upd()}},500);
+
+function showKey(k,exp){
+  S.done=true;$('work').classList.add('hide');$('res').classList.remove('hide');$('key').textContent=k;
+  $('ex').textContent=exp?new Date(exp).toLocaleString('bn-BD'):'২৪ ঘণ্টা';
+  try{localStorage.setItem('ll_claim',JSON.stringify({k:k,e:exp}))}catch(e){}
+}
+$('go').onclick=function(){
+  if(!S.started){
+    $('go').disabled=true;
+    api('/api/claim/start',{}).then(function(r){S.cid=r.cid;S.started=true;S.vis=0;S.scroll=0;S.clicks=0;toast('শুরু হয়েছে — নিচে স্ক্রল করুন');window.scrollBy({top:200,behavior:'smooth'});upd()}).catch(function(e){toast(e.message);$('go').disabled=false});
+    return;
+  }
+  if(!upd())return;
+  S.finishing=true;$('go').disabled=true;$('go').textContent='যাচাই হচ্ছে…';
+  api('/api/claim/finish',{cid:S.cid,clicks:S.clicks,scrolled:S.scroll>=0.9,vis:Math.floor(S.vis)}).then(function(r){showKey(r.key,r.expiresAt)}).catch(function(e){S.finishing=false;toast(e.message);upd()});
+};
+$('cp').onclick=function(){var k=$('key').textContent;try{navigator.clipboard.writeText(k).then(function(){toast('Copy হয়েছে ✓')},function(){fallback(k)})}catch(e){fallback(k)}};
+function fallback(k){var t=document.createElement('textarea');t.value=k;document.body.appendChild(t);t.select();try{document.execCommand('copy');toast('Copy হয়েছে ✓')}catch(e){toast('Key চেপে ধরে Copy করুন')}document.body.removeChild(t)}
+
+api('/api/claim/config').then(function(c){
+  cfg=c;
+  if(!c.enabled){$('work').classList.add('hide');$('off').classList.remove('hide');return}
+  $('cl').textContent=c.clicks>1?'('+c.clicks+' বার)':'';
+  if(!c.clicks)$('s3').classList.add('hide');
+  if(!c.scroll)$('s2').classList.add('hide');
+  mountAds();upd();
+  try{var o=JSON.parse(localStorage.getItem('ll_claim')||'null');if(o&&o.e&&o.e>Date.now()){var b=document.createElement('button');b.className='btn ghost';b.textContent='আগের Key দেখুন';b.onclick=function(){showKey(o.k,o.e)};$('work').appendChild(b)}}catch(e){}
+}).catch(function(e){$('work').innerHTML='<b>লোড হয়নি:</b> '+e.message});
+</script>
+</body>
+</html>
