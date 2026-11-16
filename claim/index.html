@@ -43,6 +43,10 @@ li.done .n{background:var(--ok);color:#03180d;border-color:var(--ok)}
 .fill h2{font-size:22px;margin-bottom:6px}
 .fill p{color:var(--mut);font-size:15px;margin-bottom:8px}
 .hide{display:none!important}
+.cd{color:var(--c1);font-family:'Rajdhani',sans-serif;font-size:1.25em}
+.big{text-align:center;margin:6px 0 12px;font-family:'Rajdhani',sans-serif}
+.big span{display:block;font-size:64px;line-height:1;font-weight:700;background:linear-gradient(90deg,var(--c1),var(--c2),var(--c3));-webkit-background-clip:text;background-clip:text;color:transparent}
+.big small{color:var(--mut);font-size:14px}
 #stick{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;justify-content:center;background:rgba(5,6,15,.92);border-top:1px solid var(--line);min-height:56px}
 .toast{position:fixed;left:50%;top:18px;transform:translateX(-50%);background:#101428;border:1px solid var(--line);padding:10px 18px;border-radius:12px;opacity:0;transition:.3s;pointer-events:none;z-index:99;max-width:90vw}
 .toast.on{opacity:1}
@@ -58,11 +62,13 @@ li.done .n{background:var(--ok);color:#03180d;border-color:var(--ok)}
     <div id="off" class="hide"><b>Token claim এখন বন্ধ আছে।</b> পরে আবার আসুন।</div>
     <div id="work">
       <ul class="steps">
-        <li id="s1"><span class="n">1</span><div class="st"><b>অপেক্ষা করুন <span id="wl">10</span> সেকেন্ড</b><small>এই পেজেই থাকুন (অন্য ট্যাবে গেলে সময় থামে)</small><div class="bar"><i id="b1"></i></div></div></li>
-        <li id="s2"><span class="n">2</span><div class="st"><b>পেজ একদম নিচ পর্যন্ত স্ক্রল করুন</b><small>নিচে নামুন, সব দেখুন</small><div class="bar"><i id="b2"></i></div></div></li>
-        <li id="s3"><span class="n">3</span><div class="st"><b>একটি Ad তে ক্লিক করুন <span id="cl"></span></b><small>যেকোনো বিজ্ঞাপন বা নিচের Sponsor বাটনে ক্লিক করুন</small><div class="bar"><i id="b3"></i></div></div></li>
-        <li id="s4"><span class="n">4</span><div class="st"><b>Secret Key জেনারেট করুন</b><small>উপরের ৩টি শেষ হলে বাটন চালু হবে</small></div></li>
+        <li id="s1"><span class="n">1</span><div class="st"><b>ধাপ ১: অপেক্ষা করুন <span id="wl" class="cd">10</span> সেকেন্ড</b><small>এই পেজেই থাকুন (অন্য ট্যাবে গেলে সময় থামে)</small><div class="bar"><i id="b1"></i></div></div></li>
+        <li id="s1b"><span class="n">2</span><div class="st"><b>ধাপ ২: আবার <span id="wl2" class="cd">10</span> সেকেন্ড অপেক্ষা</b><small>ধাপ ১ শেষ হলে "পরের ধাপ" বাটন চাপুন, তারপর আরও একবার অপেক্ষা</small><div class="bar"><i id="b1b"></i></div></div></li>
+        <li id="s2"><span class="n">3</span><div class="st"><b>পেজ একদম নিচ পর্যন্ত স্ক্রল করুন</b><small>নিচে নামুন, সব দেখুন</small><div class="bar"><i id="b2"></i></div></div></li>
+        <li id="s3"><span class="n">4</span><div class="st"><b>একটি Ad তে ক্লিক করুন <span id="cl"></span></b><small>যেকোনো বিজ্ঞাপন বা নিচের Sponsor বাটনে ক্লিক করুন</small><div class="bar"><i id="b3"></i></div></div></li>
+        <li id="s4"><span class="n">5</span><div class="st"><b>Secret Key জেনারেট করুন</b><small>উপরের ধাপগুলো শেষ হলে বাটন চালু হবে</small></div></li>
       </ul>
+      <div class="big hide" id="big"><span id="bigN">10</span><small id="bigT">সেকেন্ড</small></div>
       <button class="btn" id="go">▶ শুরু করুন</button>
       <a class="btn ghost hide" id="sp" target="_blank" rel="noopener">🎁 Sponsor দেখুন (ক্লিক গণনা হবে)</a>
     </div>
@@ -75,6 +81,11 @@ li.done .n{background:var(--ok);color:#03180d;border-color:var(--ok)}
   </div>
 
   <div class="ad slot"></div>
+  <div id="more" class="hide">
+    <div class="card fill"><h2>🎯 ধাপ ২ চলছে</h2><p>আর একটু অপেক্ষা — নিচের অফারগুলোও দেখে নিতে পারেন।</p></div>
+    <div class="ad slot2"></div>
+    <div class="ad slot2"></div>
+  </div>
   <div class="card fill"><h2>কীভাবে কাজ করে?</h2><p>প্রতিটি Key একবার ব্যবহার করা যায়। Redeem করলে র‍্যান্ডম ১–৫ Token আপনার Wallet এ যোগ হবে।</p></div>
   <div class="ad slot"></div>
   <div class="card fill"><h2>Token দিয়ে কী করবেন?</h2><p>Paid skin, premium asset এবং 2K / 4K / 8K high-quality Export — সব Token দিয়ে।</p></div>
@@ -82,6 +93,8 @@ li.done .n{background:var(--ok);color:#03180d;border-color:var(--ok)}
   <div class="card fill"><h2>নিয়ম</h2><p>এক ডিভাইস/নেটওয়ার্ক থেকে নির্দিষ্ট সময় পরপর Key নেওয়া যায়। অসৎ উপায়ে Key নিলে Token বাতিল হতে পারে।</p></div>
   <div class="ad slot"></div>
   <div class="card fill"><h2>আমাদের সমর্থন করুন ❤️</h2><p>এই বিজ্ঞাপনগুলো থেকেই LiveryLab চলে। সাথে থাকার জন্য ধন্যবাদ।</p></div>
+  <div class="ad slot"></div>
+  <div class="ad slot"></div>
   <div class="ad slot"></div>
   <p class="mut" style="text-align:center;font-size:13px;padding:20px 0">© LiveryLab</p>
 </div>
@@ -92,7 +105,7 @@ var API="https://bussid-skin-api.bussidskingeneratorbd.workers.dev";
 var $=function(i){return document.getElementById(i)};
 function toast(m){var t=$('tt');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(function(){t.classList.remove('on')},3200)}
 function api(p,body){return fetch(API+p,{method:body?'POST':'GET',headers:{'content-type':'application/json'},body:body?JSON.stringify(body):undefined}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j})})}
-var cfg=null,S={cid:null,vis:0,scroll:0,clicks:0,started:false,done:false,lastClick:0};
+var cfg=null,S={cid:null,vis:0,vis2:0,stage:1,scroll:0,clicks:0,started:false,done:false,lastClick:0};
 
 function adFrame(code,stick){
   var w=320,h=50,m=code.match(/['"]width['"]\s*:\s*(\d+)/),n=code.match(/['"]height['"]\s*:\s*(\d+)/);
@@ -109,16 +122,26 @@ function mountAds(){
   (cfg.scripts||[]).forEach(function(u){var s=document.createElement('script');s.async=true;s.src=u;document.body.appendChild(s)});
   if(cfg.direct){var a=$('sp');a.href=cfg.direct;a.classList.remove('hide');a.addEventListener('click',function(){hit()})}
 }
+function mountMore(){
+  var slots=document.querySelectorAll('.slot2'),b=cfg.banners||[];
+  for(var i=0;i<slots.length;i++){if(!b.length)break;slots[i].appendChild(adFrame(b[(i+1)%b.length]))}
+}
 function upd(){
-  var need=cfg.clicks;
-  var p1=Math.min(1,S.vis/cfg.wait),p2=cfg.scroll?Math.min(1,S.scroll/0.92):1,p3=need?Math.min(1,S.clicks/need):1;
-  $('b1').style.width=p1*100+'%';$('b2').style.width=p2*100+'%';$('b3').style.width=p3*100+'%';
-  $('wl').textContent=Math.max(0,Math.ceil(cfg.wait-S.vis));
-  $('s1').className=p1>=1?'done':'';$('s2').className=p2>=1?'done':'';$('s3').className=p3>=1?'done':'';
-  var ok=S.started&&p1>=1&&p2>=1&&p3>=1;
-  $('s4').className=ok?'':'';
-  $('go').disabled=S.started&&!ok&&!S.finishing;
-  $('go').textContent=!S.started?'▶ শুরু করুন':ok?'🔑 Secret Key জেনারেট করুন':'অপেক্ষা করুন…';
+  var need=cfg.clicks,W=cfg.wait;
+  var p1=Math.min(1,S.vis/W),p1b=S.stage<2?0:Math.min(1,S.vis2/W),p2=cfg.scroll?Math.min(1,S.scroll/0.92):1,p3=need?Math.min(1,S.clicks/need):1;
+  $('b1').style.width=p1*100+'%';$('b1b').style.width=p1b*100+'%';$('b2').style.width=p2*100+'%';$('b3').style.width=p3*100+'%';
+  var l1=Math.max(0,Math.ceil(W-S.vis)),l2=S.stage<2?W:Math.max(0,Math.ceil(W-S.vis2));
+  $('wl').textContent=l1;$('wl2').textContent=l2;
+  $('s1').className=p1>=1?'done':'';$('s1b').className=p1b>=1?'done':'';$('s2').className=p2>=1?'done':'';$('s3').className=p3>=1?'done':'';
+  var big=$('big');
+  if(S.started&&!S.done){big.classList.remove('hide');$('bigN').textContent=S.stage<2?l1:l2;$('bigT').textContent=(S.stage<2?'ধাপ ১':'ধাপ ২')+' — সেকেন্ড বাকি'}
+  var ok=S.started&&S.stage>=2&&p1>=1&&p1b>=1&&p2>=1&&p3>=1;
+  $('go').disabled=S.started&&!ok&&!S.finishing&&!(S.stage<2&&p1>=1);
+  var t;
+  if(!S.started)t='▶ শুরু করুন';
+  else if(S.stage<2)t=p1>=1?'➡ পরের ধাপ (আরও '+W+' সেকেন্ড)':'অপেক্ষা করুন… '+l1+'s';
+  else t=ok?'🔑 Secret Key জেনারেট করুন':(p1b<1?'অপেক্ষা করুন… '+l2+'s':'স্ক্রল/ক্লিক বাকি আছে');
+  $('go').textContent=t;
   return ok;
 }
 function hit(){
@@ -130,7 +153,11 @@ window.addEventListener('scroll',function(){
   var h=document.documentElement,r=(window.scrollY+window.innerHeight)/Math.max(1,h.scrollHeight);
   if(S.started&&r>S.scroll){S.scroll=r;upd()}
 },{passive:true});
-setInterval(function(){if(S.started&&!S.done&&document.visibilityState==='visible'&&document.hasFocus!==undefined){S.vis+=0.5;if(S.vis>cfg.wait+30)S.vis=cfg.wait+30;upd()}},500);
+setInterval(function(){
+  if(!S.started||S.done||document.visibilityState!=='visible')return;
+  if(S.stage<2){if(S.vis<cfg.wait)S.vis+=0.5}else if(S.vis2<cfg.wait)S.vis2+=0.5;
+  upd();
+},500);
 
 function showKey(k,exp){
   S.done=true;$('work').classList.add('hide');$('res').classList.remove('hide');$('key').textContent=k;
@@ -140,12 +167,18 @@ function showKey(k,exp){
 $('go').onclick=function(){
   if(!S.started){
     $('go').disabled=true;
-    api('/api/claim/start',{}).then(function(r){S.cid=r.cid;S.started=true;S.vis=0;S.scroll=0;S.clicks=0;toast('শুরু হয়েছে — নিচে স্ক্রল করুন');window.scrollBy({top:200,behavior:'smooth'});upd()}).catch(function(e){toast(e.message);$('go').disabled=false});
+    api('/api/claim/start',{}).then(function(r){S.cid=r.cid;S.started=true;S.vis=0;S.vis2=0;S.stage=1;S.scroll=0;S.clicks=0;toast('শুরু হয়েছে — নিচে স্ক্রল করুন');window.scrollBy({top:200,behavior:'smooth'});upd()}).catch(function(e){toast(e.message);$('go').disabled=false});
     return;
+  }
+  if(S.stage<2){
+    if(S.vis<cfg.wait)return;
+    S.stage=2;S.vis2=0;$('more').classList.remove('hide');mountMore();
+    toast('ধাপ ২ শুরু — আরও '+cfg.wait+' সেকেন্ড অপেক্ষা করুন');
+    window.scrollBy({top:260,behavior:'smooth'});upd();return;
   }
   if(!upd())return;
   S.finishing=true;$('go').disabled=true;$('go').textContent='যাচাই হচ্ছে…';
-  api('/api/claim/finish',{cid:S.cid,clicks:S.clicks,scrolled:S.scroll>=0.9,vis:Math.floor(S.vis)}).then(function(r){showKey(r.key,r.expiresAt)}).catch(function(e){S.finishing=false;toast(e.message);upd()});
+  api('/api/claim/finish',{cid:S.cid,clicks:S.clicks,scrolled:S.scroll>=0.9,vis:Math.floor(S.vis+S.vis2)}).then(function(r){showKey(r.key,r.expiresAt)}).catch(function(e){S.finishing=false;toast(e.message);upd()});
 };
 $('cp').onclick=function(){var k=$('key').textContent;try{navigator.clipboard.writeText(k).then(function(){toast('Copy হয়েছে ✓')},function(){fallback(k)})}catch(e){fallback(k)}};
 function fallback(k){var t=document.createElement('textarea');t.value=k;document.body.appendChild(t);t.select();try{document.execCommand('copy');toast('Copy হয়েছে ✓')}catch(e){toast('Key চেপে ধরে Copy করুন')}document.body.removeChild(t)}
